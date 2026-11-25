@@ -7,10 +7,6 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Noto+Sans+KR:wght@500;700;900&display=swap" rel="stylesheet">
-  <!-- [PeerJS] 기본은 CDN 로드(실패 시 jsdelivr 백업). 완전 오프라인 단독 파일로 만들려면
-       이 두 <script> 줄을 지우고 peerjs.min.js 내용을 <script>...</script> 안에 그대로 붙여 넣으세요. -->
-  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-  <script>window.Peer || document.write('<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"><\/script>');</script>
   <style>
     * {
       box-sizing: border-box;
@@ -410,76 +406,59 @@ const roomCodeInput = document.getElementById('roomCodeInput');
 const createRoomBtn = document.getElementById('createRoomBtn');
 const joinRoomBtn = document.getElementById('joinRoomBtn');
 
-createRoomBtn.addEventListener('click', () => {
+async function waitFb() {
+  for (let i = 0; i < 60 && !window.fbNet; i++) await new Promise(r => setTimeout(r, 100));
+  return !!window.fbNet;
+}
+
+createRoomBtn.addEventListener('click', async () => {
   sfx.init();
-  if (typeof Peer === 'undefined') {
-    netStatusEl.textContent = '⚠️ 네트워크 라이브러리 로드 실패 (인터넷 연결 확인)';
+  createRoomBtn.disabled = true;
+  netStatusEl.textContent = '⏳ 방 생성 중...';
+  if (!(await waitFb())) {
+    createRoomBtn.disabled = false;
+    netStatusEl.textContent = '⚠️ Firebase 연결 실패 (인터넷 확인 후 새로고침)';
     return;
   }
-
   cleanupNetwork();
   roomCode = generateRoomCode();
   netRole = 'HOST';
   player2 = null;
-  createRoomBtn.disabled = true;
-  netStatusEl.textContent = '⏳ 방 생성 중...';
-
-  peer = new Peer(PEER_PREFIX + roomCode, {
-    debug: 0,
-    config: ICE_CONFIG
-  });
-
-  peer.on('open', () => {
+  const nick = (nickInput.value.trim() || '익명').slice(0, 8);
+  try {
+    const conn = await window.fbNet.createRoom(roomCode, nick);
+    dataConn = conn;
     createRoomBtn.disabled = false;
     roomInfoBox.style.display = 'flex';
     roomCodeDisplay.textContent = `방 코드: ${roomCode} (친구에게 공유!)`;
-    fbCall('openRoom', roomCode, (document.getElementById('nickInput').value.trim() || '익명').slice(0, 8));
-    netStatusEl.textContent = '🐸 1P(방장) 대기중... 2P 코드 입력 시 자동 합류!';
-  });
+    netStatusEl.textContent = '🐸 1P(방장) 대기중... 2P가 들어오면 자동 합류!';
 
-  peer.on('connection', (conn) => {
-    if (dataConn && dataConn.open) {
-      conn.close();
-      return;
-    }
-    dataConn = conn;
-
-    dataConn.on('open', () => {
+    conn.on('open', () => {
       fbCall('setRoomFull', roomCode, true);
       lastHandledGuestBombSeq = 0;
       remoteGuestState = { x: WIDTH * 0.65, y: HEIGHT - 65, vx: 0, vy: 0, firing: false, bombSeq: 0 };
-      if (!player2) {
-        spawnPlayer2();
-      }
+      if (!player2) spawnPlayer2();
       netStatusEl.textContent = '🟢 2인 협동 연결 완료! (1P: 개구리 / 2P: 물고기)';
       addFloatingText(WIDTH / 2, HEIGHT / 2 - 40, '2P 붉은 물고기 참가!', '#fca5a5', 14, 90);
       sendWorldStateToGuest();
     });
-
-    dataConn.on('data', (msg) => {
-      if (msg && msg.type === 'GUEST_INPUT') {
-        remoteGuestState = msg.payload;
-      }
+    conn.on('data', (msg) => {
+      if (msg && msg.type === 'GUEST_INPUT') remoteGuestState = msg.payload;
     });
-
-    dataConn.on('close', () => {
+    conn.on('close', () => {
       if (conn._stale) return;
-      dropGuest('⚠️ 2P 연결이 끊어졌습니다. (1P 계속 진행 가능)');
+      dropGuest('⚠️ 2P 연결이 끊어졌습니다. (1P 계속 진행 가능, 새 2P 입장 가능)');
+      dataConn = conn; // 방은 유지: 새 2P가 다시 들어올 수 있음
     });
-  });
-
-  peer.on('error', (err) => {
+  } catch (e) {
     createRoomBtn.disabled = false;
-    if (err.type === 'unavailable-id') {
-      // 코드가 겹쳤을 경우 자동 재시도
-      createRoomBtn.click();
-    } else {
-      netStatusEl.textContent = `⚠️ 연결 오류(${err.type}) - 다시 시도해주세요.`;
-    }
-  });
+    if (e && e.message === 'CODE_TAKEN') { createRoomBtn.click(); return; }
+    netRole = 'SOLO';
+    netStatusEl.textContent = `⚠️ 방 생성 실패 (${(e && (e.code || e.message)) || '알 수 없음'}) - DB 규칙/주소 확인`;
+  }
 });
 
-joinRoomBtn.addEventListener('click', () => {
+joinRoomBtn.addEventListener('click', async () => {
   sfx.init();
   remoteGuestState.bombSeq = 0;
   const code = roomCodeInput.value.trim().toUpperCase();
@@ -487,70 +466,39 @@ joinRoomBtn.addEventListener('click', () => {
     netStatusEl.textContent = '⚠️ 참가할 방 코드를 입력하세요.';
     return;
   }
-  if (typeof Peer === 'undefined') {
-    netStatusEl.textContent = '⚠️ 네트워크 라이브러리 로드 실패';
+  joinRoomBtn.disabled = true;
+  netStatusEl.textContent = `⏳ [${code}] 방에 접속 중...`;
+  if (!(await waitFb())) {
+    joinRoomBtn.disabled = false;
+    netStatusEl.textContent = '⚠️ Firebase 연결 실패 (인터넷 확인 후 새로고침)';
     return;
   }
-
   cleanupNetwork();
   roomCode = code;
   netRole = 'GUEST';
-  joinRoomBtn.disabled = true;
-  netStatusEl.textContent = `⏳ [${roomCode}] 방에 접속 중...`;
-
-  peer = new Peer({
-    debug: 0,
-    config: ICE_CONFIG
-  });
-
-  let connectTimeout = setTimeout(() => {
-    if (!dataConn || !dataConn.open) {
-      joinRoomBtn.disabled = false;
-      netStatusEl.textContent = '❌ 방을 찾을 수 없거나 응답이 없습니다. 코드를 확인하세요!';
-      cleanupNetwork();
-      netRole = 'SOLO';
-    }
-  }, 15000);
-
-  peer.on('open', () => {
-    const conn = peer.connect(PEER_PREFIX + roomCode, { reliable: true });
+  try {
+    const conn = await window.fbNet.joinRoom(code);
     dataConn = conn;
-
-    conn.on('open', () => {
-      clearTimeout(connectTimeout);
-      joinRoomBtn.disabled = false;
-      spawnPlayer2();
-      roomInfoBox.style.display = 'flex';
-      roomCodeDisplay.textContent = `참가중인 방: ${roomCode} (당신은 2P 붉은 물고기!)`;
-      netStatusEl.textContent = '🐟 2P(붉은 물고기)로 온라인 참가 완료!';
-    });
-
     conn.on('data', (msg) => {
-      if (msg && msg.type === 'WORLD_STATE') {
-        applyWorldStateFromHost(msg.payload);
-      }
+      if (msg && msg.type === 'WORLD_STATE') applyWorldStateFromHost(msg.payload);
     });
-
     conn.on('close', () => {
       if (conn._stale) return;
       resetToSolo('⚠️ 방장(1P)과의 연결이 종료되었습니다. 다시 참가해보세요.');
     });
-
-    conn.on('error', () => {
-      clearTimeout(connectTimeout);
-      joinRoomBtn.disabled = false;
-      netStatusEl.textContent = '❌ 방 연결에 실패했습니다.';
-    });
-  });
-
-  peer.on('error', (err) => {
-    clearTimeout(connectTimeout);
     joinRoomBtn.disabled = false;
-    netStatusEl.textContent = err.type === 'peer-unavailable'
-      ? `❌ [${roomCode}] 방을 찾을 수 없습니다. 코드를 다시 확인하세요.`
-      : `❌ 방 코드 [${roomCode}] 접속 실패 (${err.type})`;
+    spawnPlayer2();
+    roomInfoBox.style.display = 'flex';
+    roomCodeDisplay.textContent = `참가중인 방: ${roomCode} (당신은 2P 붉은 물고기!)`;
+    netStatusEl.textContent = '🐟 2P(붉은 물고기)로 온라인 참가 완료!';
+  } catch (e) {
+    joinRoomBtn.disabled = false;
     netRole = 'SOLO';
-  });
+    const m = e && e.message;
+    netStatusEl.textContent = m === 'NO_ROOM' ? `❌ [${code}] 방을 찾을 수 없습니다. 코드를 확인하세요.`
+      : m === 'FULL' ? '❌ 이미 2명이 참가한 방입니다.'
+      : `❌ 접속 실패 (${(e && (e.code || m)) || '알 수 없음'}) - DB 규칙/주소 확인`;
+  }
 });
 
 document.getElementById('copyRoomBtn').addEventListener('click', () => {
@@ -1837,9 +1785,13 @@ function sendWorldStateToGuest() {
 
 function syncNetworkTick() {
   if (!dataConn || !dataConn.open || netRole === 'SOLO') return;
-  if (dataConn.dataChannel && dataConn.dataChannel.bufferedAmount > 65536) return; // 전송 지연 시 건너뜀
+  if (dataConn.lastRx && Date.now() - dataConn.lastRx > 10000) { // 10초 무응답 -> 연결 종료
+    if (netRole === 'HOST') { dataConn.lastRx = Date.now(); dataConn.kick(); }
+    else resetToSolo('⚠️ 방장 응답이 없어 연결을 종료했습니다.');
+    return;
+  }
   const now = Date.now();
-  if (now - lastSyncTime < 33) return; // 초당 약 30프레임 초고속 P2P 동기화
+  if (now - lastSyncTime < 50) return; // 초당 약 30프레임 초고속 P2P 동기화
   lastSyncTime = now;
 
   if (netRole === 'HOST') {
@@ -2578,7 +2530,7 @@ window.onload = function () {
 <script type="module">
   // Firebase (Realtime Database): 랭킹 저장/조회. 로드 실패해도 게임 본체는 정상 동작.
   import { initializeApp } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-app.js";
-  import { getDatabase, ref, get, push, set, update, remove, onDisconnect, query, orderByChild, limitToLast }
+  import { getDatabase, ref, get, push, set, update, remove, onDisconnect, onValue, runTransaction, query, orderByChild, limitToLast }
     from "https://www.gstatic.com/firebasejs/13.4.0/firebase-database.js";
 
   const firebaseConfig = {
@@ -2594,6 +2546,82 @@ window.onload = function () {
   const app = initializeApp(firebaseConfig);
   const db = getDatabase(app);
   window.firebaseApp = app;
+  // ---- Realtime Database 기반 2인 통신 (호스트=1P 권위 서버 방식) ----
+  // rooms/코드/guest : 2P 자리 / rt/코드/s : 호스트→게스트 스냅샷 / rt/코드/g : 게스트→호스트 입력
+  const wrap = (code, role) => {
+    const c = {
+      open: false, lastRx: 0, _q: 0, _h: {}, _u: [], _cur: null,
+      on(ev, fn) { c._h[ev] = fn; },
+      _emit(ev, a) { if (c._h[ev]) c._h[ev](a); },
+      send(msg) {
+        if (!c.open) return;
+        set(ref(db, 'rt/' + code + '/' + (role === 'host' ? 's' : 'g')), JSON.stringify({ q: ++c._q, m: msg })).catch(() => {}); // q: 값이 같아도 매번 변경 이벤트가 나도록
+      },
+      _listen(key) {
+        if (c._cur) c._cur();
+        c._cur = onValue(ref(db, 'rt/' + code + '/' + key), snap => {
+          const v = snap.val();
+          if (typeof v !== 'string') return;
+          c.lastRx = Date.now();
+          try { c._emit('data', JSON.parse(v).m); } catch (e) {}
+        });
+      },
+      _drop() {
+        if (!c.open) return;
+        c.open = false;
+        if (c._cur) { c._cur(); c._cur = null; }
+        c._emit('close');
+      },
+      kick() { if (role === 'host') remove(ref(db, 'rooms/' + code + '/guest')).catch(() => {}); },
+      close() {
+        c._stale = true; c.open = false;
+        if (c._cur) { c._cur(); c._cur = null; }
+        c._u.forEach(u => { try { u(); } catch (e) {} }); c._u = [];
+        if (role === 'host') {
+          remove(ref(db, 'rooms/' + code)).catch(() => {});
+          remove(ref(db, 'rt/' + code)).catch(() => {});
+        } else {
+          remove(ref(db, 'rooms/' + code + '/guest')).catch(() => {});
+        }
+      }
+    };
+    return c;
+  };
+  window.fbNet = {
+    createRoom: async (code, nick) => {
+      const room = ref(db, 'rooms/' + code);
+      if ((await get(room)).exists()) throw new Error('CODE_TAKEN');
+      await remove(ref(db, 'rt/' + code));
+      await set(room, { t: Date.now(), nick, full: false });
+      onDisconnect(room).remove();
+      onDisconnect(ref(db, 'rt/' + code)).remove();
+      const c = wrap(code, 'host');
+      c._u.push(onValue(ref(db, 'rooms/' + code + '/guest'), snap => {
+        if (snap.exists()) {
+          if (c.open || c._stale) return;
+          c.open = true; c.lastRx = Date.now();
+          remove(ref(db, 'rt/' + code + '/g')).catch(() => {}).finally(() => { if (c.open && !c._stale) c._listen('g'); });
+          c._emit('open');
+        } else {
+          c._drop();
+        }
+      }));
+      return c;
+    },
+    joinRoom: async (code) => {
+      const room = ref(db, 'rooms/' + code);
+      if (!(await get(room)).exists()) throw new Error('NO_ROOM');
+      const me = Math.random().toString(36).slice(2, 10);
+      const res = await runTransaction(ref(db, 'rooms/' + code + '/guest'), cur => (cur === null ? me : undefined));
+      if (!res.committed) throw new Error('FULL');
+      onDisconnect(ref(db, 'rooms/' + code + '/guest')).remove();
+      const c = wrap(code, 'guest');
+      c.open = true; c.lastRx = Date.now();
+      c._u.push(onValue(room, snap => { if (!snap.exists()) c._drop(); }));
+      c._listen('s');
+      return c;
+    }
+  };
   window.fbApi = {
     openRoom: async (code, nick) => {
       const r = ref(db, 'rooms/' + code);

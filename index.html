@@ -269,6 +269,14 @@
       </div>
     </div>
 
+    <div id="lobbyBox" style="width:100%; margin-bottom:10px; background:rgba(6,24,18,0.9); border:2px solid #3c6e57; border-radius:12px; padding:8px 12px; font-size:0.78rem;">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <b style="color:#fde047;">🚪 열린 방 (눌러서 참가)</b>
+        <button id="lobbyRefresh" class="mute-btn" style="padding:3px 8px; font-size:0.72rem;">새로고침</button>
+      </div>
+      <div id="lobbyList" style="margin-top:6px; display:flex; flex-wrap:wrap; gap:6px; color:#bbf7d0;"></div>
+    </div>
+
     <div class="screen-bezel">
       <canvas id="gameCanvas" width="360" height="480"></canvas>
       <div class="scanlines"></div>
@@ -287,6 +295,15 @@
         <span class="key-badge">Num .</span> / <span class="key-badge">X</span>
         <span>특수폭탄</span>
       </div>
+    </div>
+
+    <div id="rankBox" style="width:100%; margin-top:10px; background:rgba(6,24,18,0.9); border:2px solid #3c6e57; border-radius:12px; padding:8px 12px; font-size:0.78rem;">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:6px;">
+        <b style="color:#fde047;">🏆 랭킹 TOP 5</b>
+        <span><input id="nickInput" type="text" maxlength="8" placeholder="닉네임" style="width:84px; padding:3px 6px; border-radius:6px; border:1px solid #4ade80; background:#091f17; color:#fff; text-align:center;" />
+        <button id="rankRefresh" class="mute-btn" style="padding:3px 8px; font-size:0.72rem;">새로고침</button></span>
+      </div>
+      <ol id="rankList" style="margin:6px 0 0 18px; color:#bbf7d0;"></ol>
     </div>
 
     <!-- 모바일/터치 플레이용 패드 -->
@@ -416,6 +433,7 @@ createRoomBtn.addEventListener('click', () => {
     createRoomBtn.disabled = false;
     roomInfoBox.style.display = 'flex';
     roomCodeDisplay.textContent = `방 코드: ${roomCode} (친구에게 공유!)`;
+    fbCall('openRoom', roomCode, (document.getElementById('nickInput').value.trim() || '익명').slice(0, 8));
     netStatusEl.textContent = '🐸 1P(방장) 대기중... 2P 코드 입력 시 자동 합류!';
   });
 
@@ -427,6 +445,7 @@ createRoomBtn.addEventListener('click', () => {
     dataConn = conn;
 
     dataConn.on('open', () => {
+      fbCall('setRoomFull', roomCode, true);
       lastHandledGuestBombSeq = 0;
       remoteGuestState = { x: WIDTH * 0.65, y: HEIGHT - 65, vx: 0, vy: 0, firing: false, bombSeq: 0 };
       if (!player2) {
@@ -553,6 +572,7 @@ document.getElementById('copyRoomBtn').addEventListener('click', () => {
 });
 
 function dropGuest(msg) {
+  if (netRole === 'HOST') fbCall('setRoomFull', roomCode, false);
   netStatusEl.textContent = msg;
   player2 = null;
   dataConn = null;
@@ -580,6 +600,7 @@ function leaveRoom() {
   roomInfoBox.style.display = 'none';
   createRoomBtn.disabled = false;
   joinRoomBtn.disabled = false;
+  fbCall('closeRoom', roomCode);
   netStatusEl.textContent = '🌐 방을 닫았습니다. (1인 플레이)';
   if (state === GAME_STATE.PLAYING && player && player.hp <= 0) state = GAME_STATE.GAME_OVER;
 }
@@ -2471,8 +2492,71 @@ function render() {
 // ============================================================================
 // 11. 게임 루프 시작
 // ============================================================================
+const nickInput = document.getElementById('nickInput');
+try { nickInput.value = localStorage.getItem('frogNick') || ''; } catch (e) {}
+nickInput.addEventListener('change', () => { try { localStorage.setItem('frogNick', nickInput.value); } catch (e) {} });
+
+async function refreshRank() {
+  const el = document.getElementById('rankList');
+  if (!window.fbApi) { el.textContent = '랭킹 서버 연결 대기중…'; return; }
+  try {
+    const list = await window.fbApi.topScores(5);
+    el.innerHTML = '';
+    if (!list.length) { el.textContent = '아직 기록이 없습니다.'; return; }
+    list.forEach(r => {
+      const li = document.createElement('li');
+      li.textContent = `${r.name} · ${r.score}점 · R${r.round}${r.cleared ? ' 🏁클리어' : ''}${r.duo ? ' (2인)' : ''}`;
+      el.appendChild(li);
+    });
+  } catch (e) { el.textContent = '랭킹을 불러오지 못했습니다.'; }
+}
+document.getElementById('rankRefresh').addEventListener('click', refreshRank);
+
+function fbCall(name, ...args) {
+  try {
+    if (window.fbApi && window.fbApi[name]) {
+      const p = window.fbApi[name](...args);
+      if (p && p.catch) p.catch(() => {});
+    }
+  } catch (e) {}
+}
+
+async function refreshLobby() {
+  const el = document.getElementById('lobbyList');
+  if (!window.fbApi) { el.textContent = '연결 대기중…'; return; }
+  try {
+    const rooms = (await window.fbApi.listRooms()).filter(r => !r.full && Date.now() - r.t < 2 * 3600 * 1000);
+    el.innerHTML = '';
+    if (!rooms.length) { el.textContent = '열린 방이 없습니다. 방을 만들어보세요!'; return; }
+    rooms.forEach(r => {
+      const b = document.createElement('button');
+      b.className = 'mute-btn';
+      b.style.cssText = 'padding:4px 8px; font-size:0.74rem;';
+      b.textContent = `${r.nick || '익명'} · ${r.code}`;
+      b.addEventListener('click', () => { roomCodeInput.value = r.code; joinRoomBtn.click(); });
+      el.appendChild(b);
+    });
+  } catch (e) { el.textContent = '방 목록을 불러오지 못했습니다.'; }
+}
+document.getElementById('lobbyRefresh').addEventListener('click', refreshLobby);
+
+// 게임 오버/클리어 순간 점수 자동 저장 (방장·1인 플레이만 저장)
+let lastRankState = null;
+function watchRankSave() {
+  if (state === lastRankState) return;
+  const prev = lastRankState;
+  lastRankState = state;
+  if ((state === GAME_STATE.GAME_OVER || state === GAME_STATE.GAME_CLEAR) && prev === GAME_STATE.PLAYING &&
+      netRole !== 'GUEST' && score > 0 && window.fbApi) {
+    const name = (nickInput.value.trim() || '익명 개구리').slice(0, 8);
+    window.fbApi.saveScore(name, score, round, state === GAME_STATE.GAME_CLEAR, !!player2)
+      .then(() => setTimeout(refreshRank, 600)).catch(() => {});
+  }
+}
+
 function gameLoop() {
   update();
+  watchRankSave();
   render();
   requestAnimationFrame(gameLoop);
 }
@@ -2482,6 +2566,8 @@ window.onload = function () {
   initBackground();
   resetPlayer(true);
   gameLoop();
+  setTimeout(refreshRank, 1500);
+  setTimeout(refreshLobby, 1500);
   const q = new URLSearchParams(location.search).get('room');
   if (q) {
     roomCodeInput.value = q.toUpperCase().slice(0, 6);
@@ -2490,12 +2576,15 @@ window.onload = function () {
 };
 </script>
 <script type="module">
-  // Firebase 초기화 (게임 본체와 독립 모듈: 로드 실패해도 게임은 정상 동작)
+  // Firebase (Realtime Database): 랭킹 저장/조회. 로드 실패해도 게임 본체는 정상 동작.
   import { initializeApp } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-app.js";
+  import { getDatabase, ref, get, push, set, update, remove, onDisconnect, query, orderByChild, limitToLast }
+    from "https://www.gstatic.com/firebasejs/13.4.0/firebase-database.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyA95TXWcmzPe7KBSNaf_eeg3nCTTUtxB_A",
     authDomain: "frog-online.firebaseapp.com",
+    databaseURL: "https://frog-online-default-rtdb.asia-southeast1.firebasedatabase.app",
     projectId: "frog-online",
     storageBucket: "frog-online.firebasestorage.app",
     messagingSenderId: "304807371746",
@@ -2503,7 +2592,31 @@ window.onload = function () {
   };
 
   const app = initializeApp(firebaseConfig);
-  window.firebaseApp = app; // 이후 Firestore/Database 등 기능 추가 시 사용
+  const db = getDatabase(app);
+  window.firebaseApp = app;
+  window.fbApi = {
+    openRoom: async (code, nick) => {
+      const r = ref(db, 'rooms/' + code);
+      await set(r, { t: Date.now(), nick, full: false });
+      onDisconnect(r).remove(); // 방장이 탭을 닫으면 방 자동 삭제
+    },
+    setRoomFull: (code, full) => update(ref(db, 'rooms/' + code), { full: !!full }),
+    closeRoom: (code) => remove(ref(db, 'rooms/' + code)),
+    listRooms: async () => {
+      const snap = await get(query(ref(db, 'rooms'), orderByChild('t'), limitToLast(10)));
+      const list = [];
+      snap.forEach(c => { list.push({ code: c.key, ...c.val() }); });
+      return list.reverse();
+    },
+    saveScore: (name, score, round, cleared, duo) =>
+      push(ref(db, 'scores'), { name, score, round, cleared: !!cleared, duo: !!duo, t: Date.now() }),
+    topScores: async (n = 5) => {
+      const snap = await get(query(ref(db, 'scores'), orderByChild('score'), limitToLast(n)));
+      const list = [];
+      snap.forEach(c => { list.push(c.val()); });
+      return list.reverse();
+    }
+  };
 </script>
 </body>
 </html>

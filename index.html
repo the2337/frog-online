@@ -1,0 +1,2509 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>개구리 1942: 연못 대작전</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Noto+Sans+KR:wght@500;700;900&display=swap" rel="stylesheet">
+  <!-- [PeerJS] 기본은 CDN 로드(실패 시 jsdelivr 백업). 완전 오프라인 단독 파일로 만들려면
+       이 두 <script> 줄을 지우고 peerjs.min.js 내용을 <script>...</script> 안에 그대로 붙여 넣으세요. -->
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script>window.Peer || document.write('<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"><\/script>');</script>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    body {
+      background-color: #0b1914;
+      background-image: 
+        radial-gradient(circle at 50% 30%, #153629 0%, #07110d 100%);
+      color: #f0fdf4;
+      font-family: 'Noto Sans KR', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 12px;
+      overflow-x: hidden;
+    }
+
+    .arcade-cabinet {
+      background: linear-gradient(145deg, #1b2e26, #101d18);
+      border: 4px solid #3c6e57;
+      border-radius: 20px;
+      padding: 16px;
+      box-shadow: 
+        0 20px 50px rgba(0, 0, 0, 0.75),
+        inset 0 2px 10px rgba(134, 239, 172, 0.15);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      max-width: 100%;
+    }
+
+    .header-bar {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      padding: 0 4px;
+    }
+
+    .game-title {
+      font-weight: 900;
+      font-size: 1.15rem;
+      color: #86efac;
+      text-shadow: 2px 2px 0px #064e3b;
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .mute-btn {
+      background: #14532d;
+      border: 2px solid #4ade80;
+      color: #dcfce7;
+      padding: 6px 12px;
+      border-radius: 10px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.1s, background 0.2s;
+      box-shadow: 0 3px 0 #052e16;
+    }
+
+    .mute-btn:hover {
+      background: #166534;
+    }
+
+    .mute-btn:active {
+      transform: translateY(2px);
+      box-shadow: 0 1px 0 #052e16;
+    }
+
+    .mute-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .screen-bezel {
+      position: relative;
+      background: #04100c;
+      padding: 8px;
+      border-radius: 14px;
+      border: 4px solid #092018;
+      box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.9);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    canvas {
+      display: block;
+      width: 420px;
+      max-width: 88vw;
+      height: auto;
+      aspect-ratio: 3 / 4;
+      border-radius: 8px;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      background-color: #166078;
+    }
+
+    .scanlines {
+      position: absolute;
+      inset: 8px;
+      border-radius: 8px;
+      background: linear-gradient(
+        rgba(18, 16, 16, 0) 50%, 
+        rgba(0, 0, 0, 0.14) 50%
+      );
+      background-size: 100% 4px;
+      pointer-events: none;
+    }
+
+    .controls-panel {
+      margin-top: 14px;
+      width: 100%;
+      background: rgba(6, 24, 18, 0.8);
+      border: 2px solid #264d3d;
+      border-radius: 12px;
+      padding: 10px 14px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 0.82rem;
+      color: #bbf7d0;
+    }
+
+    .control-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .key-badge {
+      display: inline-block;
+      background: #1e3a2f;
+      border: 1px solid #4ade80;
+      border-bottom-width: 3px;
+      color: #ffffff;
+      font-family: 'Press Start 2P', monospace;
+      font-size: 0.68rem;
+      padding: 4px 7px;
+      border-radius: 6px;
+    }
+
+    .touch-controls {
+      display: none;
+      width: 100%;
+      margin-top: 12px;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+    }
+
+    @media (max-width: 768px) {
+      .touch-controls {
+        display: flex;
+      }
+      .controls-panel {
+        font-size: 0.75rem;
+        justify-content: center;
+      }
+    }
+
+    .dpad {
+      display: grid;
+      grid-template-columns: repeat(3, 44px);
+      grid-template-rows: repeat(3, 44px);
+      gap: 4px;
+    }
+
+    .t-btn {
+      background: linear-gradient(180deg, #274e3f, #173127);
+      border: 2px solid #4ade80;
+      border-radius: 10px;
+      color: #fff;
+      font-weight: 900;
+      font-size: 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 0 #091a14;
+      touch-action: manipulation;
+    }
+
+    .t-btn:active {
+      transform: translateY(3px);
+      box-shadow: 0 1px 0 #091a14;
+      background: #356b56;
+    }
+
+    .action-btns {
+      display: flex;
+      gap: 10px;
+    }
+
+    .act-btn {
+      width: 68px;
+      height: 68px;
+      border-radius: 50%;
+      font-weight: 900;
+      font-size: 0.85rem;
+      border: 3px solid #fff;
+      color: #fff;
+      box-shadow: 0 5px 0 rgba(0,0,0,0.6);
+      touch-action: manipulation;
+    }
+
+    .act-btn.fire {
+      background: radial-gradient(circle at 30% 30%, #38bdf8, #0284c7);
+    }
+
+    .act-btn.bomb {
+      background: radial-gradient(circle at 30% 30%, #fbbf24, #d97706);
+    }
+
+    .act-btn:active {
+      transform: translateY(4px);
+      box-shadow: 0 1px 0 rgba(0,0,0,0.6);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="arcade-cabinet">
+    <div class="header-bar">
+      <div class="game-title">
+        <span>🐸🐟</span>
+        <span>개구리 1942 : 연못 대작전</span>
+      </div>
+      <button id="muteBtn" class="mute-btn">🔊 소리 켜짐</button>
+    </div>
+
+    <!-- 온라인 2인용 방 만들기 / 참가 UI (WebRTC P2P 직접 연결 - 별도 서버 불필요) -->
+    <div id="multiplayerBar" style="width:100%; margin-bottom:10px; background:rgba(6,24,18,0.9); border:2px solid #3c6e57; border-radius:12px; padding:8px 12px; display:flex; flex-direction:column; gap:6px; font-size:0.78rem;">
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
+        <span id="netStatus" style="color:#86efac; font-weight:700;">🌐 모드: 1인 플레이 (방 생성/참가로 온라인 2인 가능)</span>
+        <div style="display:flex; gap:4px; align-items:center;">
+          <button id="createRoomBtn" class="mute-btn" style="padding:4px 8px; font-size:0.74rem; background:#0f5132;">방 만들기 (1P)</button>
+          <input id="roomCodeInput" type="text" maxlength="6" placeholder="방코드" style="width:74px; padding:4px 6px; border-radius:6px; border:1px solid #4ade80; background:#091f17; color:#fff; text-transform:uppercase; font-weight:700; text-align:center;" />
+          <button id="joinRoomBtn" class="mute-btn" style="padding:4px 8px; font-size:0.74rem; background:#7f1d1d; border-color:#f87171;">참가 (2P)</button>
+        </div>
+      </div>
+      <div id="roomInfoBox" style="display:none; justify-content:space-between; align-items:center; background:#092018; padding:5px 8px; border-radius:8px; border:1px dashed #fde047;">
+        <span id="roomCodeDisplay" style="color:#fde047; font-weight:900;"></span>
+        <span style="display:flex; gap:4px;"><button id="copyRoomBtn" class="mute-btn" style="padding:2px 8px; font-size:0.7rem;">초대 복사</button><button id="leaveRoomBtn" class="mute-btn" style="padding:2px 8px; font-size:0.7rem; background:#7f1d1d; border-color:#f87171;">나가기</button></span>
+      </div>
+    </div>
+
+    <div class="screen-bezel">
+      <canvas id="gameCanvas" width="360" height="480"></canvas>
+      <div class="scanlines"></div>
+    </div>
+
+    <div class="controls-panel">
+      <div class="control-group">
+        <span class="key-badge">W</span><span class="key-badge">A</span><span class="key-badge">S</span><span class="key-badge">D</span>
+        <span>이동</span>
+      </div>
+      <div class="control-group">
+        <span class="key-badge">Num 0</span> / <span class="key-badge">Space</span>
+        <span>주무기</span>
+      </div>
+      <div class="control-group">
+        <span class="key-badge">Num .</span> / <span class="key-badge">X</span>
+        <span>특수폭탄</span>
+      </div>
+    </div>
+
+    <!-- 모바일/터치 플레이용 패드 -->
+    <div class="touch-controls">
+      <div class="dpad">
+        <div></div>
+        <button class="t-btn" data-key="KeyW">▲</button>
+        <div></div>
+        <button class="t-btn" data-key="KeyA">◀</button>
+        <button class="t-btn" data-key="KeyS">▼</button>
+        <button class="t-btn" data-key="KeyD">▶</button>
+        <div></div>
+        <div></div>
+        <div></div>
+      </div>
+      <div class="action-btns">
+        <button class="act-btn bomb" id="touchBomb">폭탄<br>(.)</button>
+        <button class="act-btn fire" id="touchFire">발사<br>(0)</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+/**
+ * ============================================================================
+ * 개구리 1942: 연못 대작전 (FROG 1942: POND MISSION - 2P CO-OP ONLINE P2P)
+ * ============================================================================
+ */
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+const WIDTH = 360;
+const HEIGHT = 480;
+
+// ============================================================================
+// 온라인 멀티플레이 상태 및 WebRTC (PeerJS) P2P 동기화 설정
+// ============================================================================
+const PEER_PREFIX = 'frog1942-pond-coop-v1-';
+let peer = null;
+let dataConn = null;
+
+let netRole = 'SOLO'; // 'SOLO' | 'HOST' (1P 청개구리) | 'GUEST' (2P 붉은 물고기)
+let roomCode = '';
+let lastSyncTime = 0;
+let netEvents = [];   // 호스트 -> 게스트로 전달할 효과음/이펙트 이벤트
+let enemyIdSeq = 0;   // 적 식별자 (게스트 보간용)
+// STUN + 공개 TURN 릴레이(직접 연결이 막힌 망에서 우회). 자체 TURN이 있으면 교체하세요.
+const ICE_CONFIG = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443', 'turn:openrelay.metered.ca:443?transport=tcp'],
+      username: 'openrelayproject', credential: 'openrelayproject' }
+  ]
+};
+const NET_SFX = ['shoot', 'hit', 'explode', 'specialBomb', 'playerDamage', 'bossWarning', 'roundClear', 'gameClear'];
+function netEmit(ev) {
+  if (netRole !== 'HOST' || !dataConn || !dataConn.open) return;
+  netEvents.push(ev);
+  if (netEvents.length > 120) netEvents.shift();
+}
+function inviteText() {
+  return /^https?:$/.test(location.protocol) ? `${location.origin}${location.pathname}?room=${roomCode}` : roomCode;
+}
+
+// 게스트(2P)의 입력을 호스트로 전달하기 위한 상태
+let remoteGuestState = {
+  x: WIDTH * 0.65,
+  y: HEIGHT - 65,
+  vx: 0,
+  vy: 0,
+  firing: false,
+  bombSeq: 0
+};
+let lastHandledGuestBombSeq = 0;
+
+function generateRoomCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for (let i = 0; i < 5; i++) {
+    code += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return code;
+}
+
+function cleanupNetwork() {
+  if (dataConn) {
+    dataConn._stale = true;
+    try { dataConn.close(); } catch (e) {}
+    dataConn = null;
+  }
+  if (peer) {
+    try { peer.destroy(); } catch (e) {}
+    peer = null;
+  }
+}
+
+const netStatusEl = document.getElementById('netStatus');
+const roomInfoBox = document.getElementById('roomInfoBox');
+const roomCodeDisplay = document.getElementById('roomCodeDisplay');
+const roomCodeInput = document.getElementById('roomCodeInput');
+const createRoomBtn = document.getElementById('createRoomBtn');
+const joinRoomBtn = document.getElementById('joinRoomBtn');
+
+createRoomBtn.addEventListener('click', () => {
+  sfx.init();
+  if (typeof Peer === 'undefined') {
+    netStatusEl.textContent = '⚠️ 네트워크 라이브러리 로드 실패 (인터넷 연결 확인)';
+    return;
+  }
+
+  cleanupNetwork();
+  roomCode = generateRoomCode();
+  netRole = 'HOST';
+  player2 = null;
+  createRoomBtn.disabled = true;
+  netStatusEl.textContent = '⏳ 방 생성 중...';
+
+  peer = new Peer(PEER_PREFIX + roomCode, {
+    debug: 0,
+    config: ICE_CONFIG
+  });
+
+  peer.on('open', () => {
+    createRoomBtn.disabled = false;
+    roomInfoBox.style.display = 'flex';
+    roomCodeDisplay.textContent = `방 코드: ${roomCode} (친구에게 공유!)`;
+    netStatusEl.textContent = '🐸 1P(방장) 대기중... 2P 코드 입력 시 자동 합류!';
+  });
+
+  peer.on('connection', (conn) => {
+    if (dataConn && dataConn.open) {
+      conn.close();
+      return;
+    }
+    dataConn = conn;
+
+    dataConn.on('open', () => {
+      lastHandledGuestBombSeq = 0;
+      remoteGuestState = { x: WIDTH * 0.65, y: HEIGHT - 65, vx: 0, vy: 0, firing: false, bombSeq: 0 };
+      if (!player2) {
+        spawnPlayer2();
+      }
+      netStatusEl.textContent = '🟢 2인 협동 연결 완료! (1P: 개구리 / 2P: 물고기)';
+      addFloatingText(WIDTH / 2, HEIGHT / 2 - 40, '2P 붉은 물고기 참가!', '#fca5a5', 14, 90);
+      sendWorldStateToGuest();
+    });
+
+    dataConn.on('data', (msg) => {
+      if (msg && msg.type === 'GUEST_INPUT') {
+        remoteGuestState = msg.payload;
+      }
+    });
+
+    dataConn.on('close', () => {
+      if (conn._stale) return;
+      dropGuest('⚠️ 2P 연결이 끊어졌습니다. (1P 계속 진행 가능)');
+    });
+  });
+
+  peer.on('error', (err) => {
+    createRoomBtn.disabled = false;
+    if (err.type === 'unavailable-id') {
+      // 코드가 겹쳤을 경우 자동 재시도
+      createRoomBtn.click();
+    } else {
+      netStatusEl.textContent = `⚠️ 연결 오류(${err.type}) - 다시 시도해주세요.`;
+    }
+  });
+});
+
+joinRoomBtn.addEventListener('click', () => {
+  sfx.init();
+  remoteGuestState.bombSeq = 0;
+  const code = roomCodeInput.value.trim().toUpperCase();
+  if (!code) {
+    netStatusEl.textContent = '⚠️ 참가할 방 코드를 입력하세요.';
+    return;
+  }
+  if (typeof Peer === 'undefined') {
+    netStatusEl.textContent = '⚠️ 네트워크 라이브러리 로드 실패';
+    return;
+  }
+
+  cleanupNetwork();
+  roomCode = code;
+  netRole = 'GUEST';
+  joinRoomBtn.disabled = true;
+  netStatusEl.textContent = `⏳ [${roomCode}] 방에 접속 중...`;
+
+  peer = new Peer({
+    debug: 0,
+    config: ICE_CONFIG
+  });
+
+  let connectTimeout = setTimeout(() => {
+    if (!dataConn || !dataConn.open) {
+      joinRoomBtn.disabled = false;
+      netStatusEl.textContent = '❌ 방을 찾을 수 없거나 응답이 없습니다. 코드를 확인하세요!';
+      cleanupNetwork();
+      netRole = 'SOLO';
+    }
+  }, 15000);
+
+  peer.on('open', () => {
+    const conn = peer.connect(PEER_PREFIX + roomCode, { reliable: true });
+    dataConn = conn;
+
+    conn.on('open', () => {
+      clearTimeout(connectTimeout);
+      joinRoomBtn.disabled = false;
+      spawnPlayer2();
+      roomInfoBox.style.display = 'flex';
+      roomCodeDisplay.textContent = `참가중인 방: ${roomCode} (당신은 2P 붉은 물고기!)`;
+      netStatusEl.textContent = '🐟 2P(붉은 물고기)로 온라인 참가 완료!';
+    });
+
+    conn.on('data', (msg) => {
+      if (msg && msg.type === 'WORLD_STATE') {
+        applyWorldStateFromHost(msg.payload);
+      }
+    });
+
+    conn.on('close', () => {
+      if (conn._stale) return;
+      resetToSolo('⚠️ 방장(1P)과의 연결이 종료되었습니다. 다시 참가해보세요.');
+    });
+
+    conn.on('error', () => {
+      clearTimeout(connectTimeout);
+      joinRoomBtn.disabled = false;
+      netStatusEl.textContent = '❌ 방 연결에 실패했습니다.';
+    });
+  });
+
+  peer.on('error', (err) => {
+    clearTimeout(connectTimeout);
+    joinRoomBtn.disabled = false;
+    netStatusEl.textContent = err.type === 'peer-unavailable'
+      ? `❌ [${roomCode}] 방을 찾을 수 없습니다. 코드를 다시 확인하세요.`
+      : `❌ 방 코드 [${roomCode}] 접속 실패 (${err.type})`;
+    netRole = 'SOLO';
+  });
+});
+
+document.getElementById('copyRoomBtn').addEventListener('click', () => {
+  if (!roomCode) return;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(inviteText()).catch(() => {});
+  } else {
+    const temp = document.createElement('textarea');
+    temp.value = inviteText();
+    document.body.appendChild(temp);
+    temp.select();
+    document.execCommand('copy');
+    document.body.removeChild(temp);
+  }
+  document.getElementById('copyRoomBtn').textContent = '복사됨!';
+  setTimeout(() => {
+    document.getElementById('copyRoomBtn').textContent = '초대 복사';
+  }, 1500);
+});
+
+function dropGuest(msg) {
+  netStatusEl.textContent = msg;
+  player2 = null;
+  dataConn = null;
+  if (state === GAME_STATE.PLAYING && player && player.hp <= 0) state = GAME_STATE.GAME_OVER;
+}
+
+function resetToSolo(msg) {
+  cleanupNetwork();
+  netRole = 'SOLO';
+  player2 = null;
+  bullets = []; enemyBullets = []; enemies = [];
+  state = GAME_STATE.TITLE;
+  roomInfoBox.style.display = 'none';
+  createRoomBtn.disabled = false;
+  joinRoomBtn.disabled = false;
+  resetPlayer(true);
+  netStatusEl.textContent = msg;
+}
+
+function leaveRoom() {
+  if (netRole === 'GUEST') { resetToSolo('🌐 방에서 나왔습니다. (1인 플레이)'); return; }
+  cleanupNetwork();
+  netRole = 'SOLO';
+  player2 = null;
+  roomInfoBox.style.display = 'none';
+  createRoomBtn.disabled = false;
+  joinRoomBtn.disabled = false;
+  netStatusEl.textContent = '🌐 방을 닫았습니다. (1인 플레이)';
+  if (state === GAME_STATE.PLAYING && player && player.hp <= 0) state = GAME_STATE.GAME_OVER;
+}
+document.getElementById('leaveRoomBtn').addEventListener('click', leaveRoom);
+roomCodeInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') joinRoomBtn.click(); });
+
+// ============================================================================
+// 1. 레트로 칩튠 사운드 엔진 (Web Audio API)
+// ============================================================================
+class SoundSystem {
+  constructor() {
+    this.ctx = null;
+    this.muted = false;
+  }
+
+  init() {
+    if (!this.ctx) {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      this.ctx = new AudioContext();
+    }
+    if (this.ctx.state === 'suspended') {
+      this.ctx.resume();
+    }
+  }
+
+  playTone(freq, type, duration, vol = 0.12, slideTo = null) {
+    if (this.muted || !this.ctx) return;
+    try {
+      const now = this.ctx.currentTime;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, now);
+      if (slideTo) {
+        osc.frequency.exponentialRampToValueAtTime(slideTo, now + duration);
+      }
+      gain.gain.setValueAtTime(vol, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start(now);
+      osc.stop(now + duration);
+    } catch (e) {}
+  }
+
+  shoot() {
+    this.playTone(580, 'square', 0.08, 0.07, 880);
+  }
+
+  hit() {
+    this.playTone(190, 'sawtooth', 0.07, 0.08, 90);
+  }
+
+  explode(large = false) {
+    if (this.muted || !this.ctx) return;
+    try {
+      const duration = large ? 0.55 : 0.22;
+      const bufferSize = this.ctx.sampleRate * duration;
+      const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.35));
+      }
+      const noise = this.ctx.createBufferSource();
+      noise.buffer = buffer;
+
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(large ? 500 : 850, this.ctx.currentTime);
+      filter.frequency.exponentialRampToValueAtTime(60, this.ctx.currentTime + duration);
+
+      const gain = this.ctx.createGain();
+      gain.gain.setValueAtTime(large ? 0.28 : 0.14, this.ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
+
+      noise.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.ctx.destination);
+      noise.start();
+    } catch (e) {}
+  }
+
+  specialBomb() {
+    this.explode(true);
+    this.playTone(300, 'triangle', 0.6, 0.2, 60);
+    setTimeout(() => this.playTone(620, 'sine', 0.4, 0.15, 180), 80);
+  }
+
+  playerDamage() {
+    this.playTone(220, 'sawtooth', 0.35, 0.18, 55);
+  }
+
+  bossWarning() {
+    const notes = [440, 330, 440, 330];
+    notes.forEach((n, idx) => {
+      setTimeout(() => this.playTone(n, 'square', 0.16, 0.12), idx * 190);
+    });
+  }
+
+  roundClear() {
+    const melody = [523.25, 659.25, 783.99, 1046.50];
+    melody.forEach((n, idx) => {
+      setTimeout(() => this.playTone(n, 'square', 0.16, 0.12), idx * 130);
+    });
+  }
+
+  gameClear() {
+    const melody = [523.25, 659.25, 783.99, 1046.50, 783.99, 1046.50];
+    melody.forEach((n, idx) => {
+      setTimeout(() => this.playTone(n, 'square', idx === 5 ? 0.45 : 0.14, 0.14), idx * 150);
+    });
+  }
+}
+
+const sfx = new SoundSystem();
+let sfxDepth = 0;
+NET_SFX.forEach(name => {
+  const orig = sfx[name].bind(sfx);
+  sfx[name] = (...args) => {
+    if (sfxDepth === 0) netEmit(['s', name, ...args]);
+    sfxDepth++;
+    try { orig(...args); } finally { sfxDepth--; }
+  };
+});
+
+document.getElementById('muteBtn').addEventListener('click', () => {
+  sfx.init();
+  sfx.muted = !sfx.muted;
+  document.getElementById('muteBtn').textContent = sfx.muted ? '🔇 소리 꺼짐' : '🔊 소리 켜짐';
+});
+
+// ============================================================================
+// 2. 도트 스프라이트 픽셀 아트 렌더러
+// ============================================================================
+const spriteCache = {};
+
+function createPixelSprite(key, pixelSize, palette, rows) {
+  if (spriteCache[key]) return spriteCache[key];
+  const h = rows.length;
+  const w = rows[0].length;
+  const off = document.createElement('canvas');
+  off.width = w * pixelSize;
+  off.height = h * pixelSize;
+  const octx = off.getContext('2d');
+
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const ch = rows[y][x];
+      if (ch !== '.' && palette[ch]) {
+        octx.fillStyle = palette[ch];
+        octx.fillRect(x * pixelSize, y * pixelSize, pixelSize, pixelSize);
+      }
+    }
+  }
+  spriteCache[key] = off;
+  return off;
+}
+
+function initSprites() {
+  // 1) 플레이어 1: 청개구리
+  const frogPalette = {
+    'O': '#0b2e13',
+    'G': '#22c55e',
+    'L': '#86efac',
+    'W': '#ffffff',
+    'B': '#090d16',
+    'Y': '#fde047',
+    'R': '#ef4444'
+  };
+
+  createPixelSprite('frog_0', 2, frogPalette, [
+    "....OO....OO....",
+    "...OWWO..OWWO...",
+    "...OWBO..OWBO...",
+    "....OOGGGGOO....",
+    "..OOGGLLLLGGOO..",
+    ".OGGLLLLLLLLGGO.",
+    "OOGGLLLLLLLLGGOO",
+    "O.OGGGGGGGGGGO.O",
+    "..OGGGGGGGGGGO..",
+    ".OOOGGGGGGGGOOO.",
+    "OGGO.OOGGOO.OGGO",
+    "OYYO........OYYO",
+    "................",
+    "................"
+  ]);
+
+  createPixelSprite('frog_1', 2, frogPalette, [
+    "....OO....OO....",
+    "...OWWO..OWWO...",
+    "...OWBO..OWBO...",
+    "....OOGGGGOO....",
+    "..OOGGLLLLGGOO..",
+    ".OGGLLLLLLLLGGO.",
+    "OOGGLLLLLLLLGGOO",
+    "O.OGGGGGGGGGGO.O",
+    "..OGGGGGGGGGGO..",
+    ".OOGGGGGGGGGGOO.",
+    "O.O.OOGGGGOO.O.O",
+    "....O......O....",
+    "...OYY....YYO...",
+    "................"
+  ]);
+
+  createPixelSprite('frog_2', 2, frogPalette, [
+    "....OO....OO....",
+    "...OWWO..OWWO...",
+    "...OWBO..OWBO...",
+    "....OOGGGGOO....",
+    "..OOGGLLLLGGOO..",
+    ".OGGLLLLLLLLGGO.",
+    "OOGGLLLLLLLLGGOO",
+    "..OGGGGGGGGGGO..",
+    ".OOGGGGGGGGGGOO.",
+    "O..OGGGGGGGGO..O",
+    "....OOGGGGOO....",
+    ".....O....O.....",
+    "....OO....OO....",
+    "...YYY....YYY..."
+  ]);
+
+  // 1-B) 플레이어 2: 붉은색 물고기 (눈 테두리 오타 WB0 -> WBO 수정 완료)
+  const fishPalette = {
+    'O': '#450a0a',
+    'R': '#ef4444',
+    'L': '#fca5a5',
+    'D': '#b91c1c',
+    'W': '#ffffff',
+    'B': '#090d16',
+    'Y': '#fde047'
+  };
+
+  createPixelSprite('fish_0', 2, fishPalette, [
+    "......OOOO......",
+    ".....ORRRRO.....",
+    "....ORRLLRRO....",
+    "...OWBRRRRWBO...",
+    "...OWBRRRRWBO...",
+    "..OORRRRRRRROO..",
+    ".ODDRRLLLLRRDDO.",
+    "OYDDRRRRRRRRDDYO",
+    ".OO.ORRRRRRO.OO.",
+    ".....ORRRRO.....",
+    "....OORRRROO....",
+    "...ODDDRRO......",
+    "..OYYDDDO.......",
+    "..OOOOOO........"
+  ]);
+
+  createPixelSprite('fish_1', 2, fishPalette, [
+    "......OOOO......",
+    ".....ORRRRO.....",
+    "....ORRLLRRO....",
+    "...OWBRRRRWBO...",
+    "...OWBRRRRWBO...",
+    "..OORRRRRRRROO..",
+    ".ODDRRLLLLRRDDO.",
+    "OYDDRRRRRRRRDDYO",
+    ".OO.ORRRRRRO.OO.",
+    ".....ORRRRO.....",
+    ".....OORROO.....",
+    "....ODDRRDDO....",
+    "...OYYDOODYYO...",
+    "...OOOO..OOOO..."
+  ]);
+
+  createPixelSprite('fish_2', 2, fishPalette, [
+    "......OOOO......",
+    ".....ORRRRO.....",
+    "....ORRLLRRO....",
+    "...OWBRRRRWBO...",
+    "...OWBRRRRWBO...",
+    "..OORRRRRRRROO..",
+    ".ODDRRLLLLRRDDO.",
+    "OYDDRRRRRRRRDDYO",
+    ".OO.ORRRRRRO.OO.",
+    ".....ORRRRO.....",
+    "....OORRRROO....",
+    "......ORRDDDO...",
+    ".......ODDDYYO..",
+    "........OOOOOO.."
+  ]);
+
+  // 2) 소형 적 1: 소금쟁이
+  createPixelSprite('strider', 2, {
+    'O': '#1e1b4b',
+    'B': '#38bdf8',
+    'D': '#0284c7',
+    'R': '#f43f5e'
+  }, [
+    "O..O........O..O",
+    ".OO...OOOO...OO.",
+    "..OO.OBBBBO.OO..",
+    "....OOBRRBOO....",
+    "..OO.ODDDDO.OO..",
+    ".OO...OOOO...OO.",
+    "O..O...OO...O..O",
+    ".......OO......."
+  ]);
+
+  // 3) 소형 적 2: 올챙이/송사리
+  createPixelSprite('tadpole', 2, {
+    'O': '#1f2937',
+    'P': '#a855f7',
+    'L': '#e9d5ff',
+    'Y': '#facc15'
+  }, [
+    ".....OOOO.....",
+    "....OPPPPO....",
+    "...OPPLLPPO...",
+    "...OPYPPYPO...",
+    "...OPPPPPPO...",
+    "....OOPPOO....",
+    ".....OPPO.....",
+    "......OO......",
+    ".....OPPO.....",
+    "......OO......"
+  ]);
+
+  // 4) 소형 적 3: 잠자리
+  createPixelSprite('dragonfly', 2, {
+    'O': '#31102f',
+    'R': '#fb7185',
+    'W': '#e0f2fe',
+    'Y': '#fde047'
+  }, [
+    "......OOOO......",
+    ".....ORYYRO.....",
+    "OOOOOORRRROOOOOO",
+    "OWWWWORRRROWWWWO",
+    ".OOOO.ORRO.OOOO.",
+    "OOOOO.ORRO.OOOOO",
+    "OWWWWOORROOWWWWO",
+    ".OOOO.ORRO.OOOO.",
+    "......ORRO......",
+    "......ORRO......",
+    ".......OO......."
+  ]);
+
+  // 5) 중간 보스: 거대 물방개
+  createPixelSprite('midboss', 3, {
+    'O': '#1c1917',
+    'B': '#b45309',
+    'L': '#f59e0b',
+    'Y': '#fef08a',
+    'R': '#ef4444'
+  }, [
+    "...OO..........OO...",
+    "....OO..OOOO..OO....",
+    "..O..OOBBBBBBOO..O..",
+    ".OO.OOBLLLLLLBOO.OO.",
+    "O..OOBBLLYYLLBBOO..O",
+    "...OOBBLLYYLLBBOO...",
+    ".OO.OOBLLLLLLBOO.OO.",
+    "O...OOBBBBBBBBOO...O",
+    "..OO.OOBBBBBBOO.OO..",
+    ".O....OORRRROO....O.",
+    ".......OOOOOO......."
+  ]);
+
+  // 6) 라운드 1 최종 보스: 대왕 메기
+  createPixelSprite('boss_1', 3, {
+    'O': '#0f172a',
+    'D': '#334155',
+    'M': '#64748b',
+    'L': '#cbd5e1',
+    'Y': '#facc15',
+    'R': '#ef4444'
+  }, [
+    "........OOOOOOOO........",
+    "......OOMMMMMMMMOO......",
+    "....OOMMLLLLLLLLMMOO....",
+    "...OOMMLLLLLLLLLLMMOO...",
+    "..OOMMMLLLLLLLLLLMMMOO..",
+    ".OOMMMMLLLLLLLLLLMMMMOO.",
+    "OOMMMMMDDDDDDDDDDMMMMMOO",
+    "OOMMMMMDDDDDDDDDDMMMMMOO",
+    ".OOMMMMDDDDDDDDDDMMMMOO.",
+    "OOOOOMMDDDDDDDDDDMMOOOOO",
+    "O..OOMMYYDDDDDDYYMMOO..O",
+    "O...OOMRRRRRRRRRRMOO...O",
+    ".O...OORRRRRRRRRROO...O.",
+    "..OO..OOOOOOOOOOOO..OO.."
+  ]);
+
+  // 7) 라운드 2 최종 보스: 황소개구리 대왕
+  createPixelSprite('boss_2', 3, {
+    'O': '#142615',
+    'D': '#3f6212',
+    'M': '#65a30d',
+    'L': '#bef264',
+    'R': '#dc2626',
+    'Y': '#fde047'
+  }, [
+    "......OOOOOOOOOOOO......",
+    "....OODDDDDDDDDDDDOO....",
+    "..OODDDDMMMMMMMMDDDDOO..",
+    ".OODDDMMMMMMMMMMMMDDDOO.",
+    "OODDDMMMMLLLLLLMMMMDDDOO",
+    "OODDDMMMMLLLLLLMMMMDDDOO",
+    "OODDDDDMMMMMMMMMMDDDDDOO",
+    ".OODDDDDDDDDDDDDDDDDDOO.",
+    "O.OODDDDYYYYYYYYDDDDOO.O",
+    "O..OODDRRRRRRRRRRDDOO..O",
+    "OO..OOYYYYYYYYYYYYOO..OO",
+    ".OO..OORRRRRRRRRROO..OO.",
+    "......OOOOOOOOOOOO......"
+  ]);
+
+  // 8) 라운드 3 최종 보스: 연못 수호신 황금잉어
+  createPixelSprite('boss_3', 3, {
+    'O': '#270e0b',
+    'R': '#dc2626',
+    'G': '#f59e0b',
+    'Y': '#fef08a',
+    'W': '#ffffff',
+    'C': '#38bdf8'
+  }, [
+    ".......OOOOOOOOOO.......",
+    ".....OOGGGGGGGGGGOO.....",
+    "...OOGGYYYYYYYYYYGGOO...",
+    "..OORRRGGGGGGGGGGGRROO..",
+    ".OORRRRGGGGGGGGGGGRRRRO.",
+    "OORRRRRGGGGGGGGGGGRRRRRO",
+    "OORRRRRGGGGGGGGGGGRRRRRO",
+    ".OORRRRGGGGGGGGGGGRRRRO.",
+    "OO.OORRGGGGGGGGGGGRROO.OO",
+    "O...OOGGCCCCCCCCGGOO...O",
+    "OO..OOGGWWWWWWWWGGOO..OO",
+    ".OO..OORRRRRRRRRROO..OO.",
+    "..OO..OOOOOOOOOOOO..OO.."
+  ]);
+}
+
+// ============================================================================
+// 3. 게임 상태 및 데이터 구조
+// ============================================================================
+const GAME_STATE = {
+  TITLE: 'TITLE',
+  PLAYING: 'PLAYING',
+  ROUND_CLEAR: 'ROUND_CLEAR',
+  GAME_OVER: 'GAME_OVER',
+  GAME_CLEAR: 'GAME_CLEAR'
+};
+
+let state = GAME_STATE.TITLE;
+let score = 0;
+let round = 1;
+const MAX_ROUNDS = 3;
+
+let smallSpawned = 0;
+let smallTarget = 24;
+let midBossSpawned = 0;
+let midBossDefeated = 0;
+const MID_BOSS_TARGET = 5;
+let finalBossSpawned = false;
+let bossWarningTimer = 0;
+let roundClearTimer = 0;
+let screenShake = 0;
+let bombFlashTimer = 0;
+
+const keys = {};
+
+let player = null;
+let player2 = null;
+let bullets = [];
+let enemyBullets = [];
+let enemies = [];
+let particles = [];
+let ripples = [];
+let lilyPads = [];
+let floatingTexts = [];
+
+const ROUND_CONFIG = {
+  1: {
+    name: 'ROUND 1 : 고요한 수초 연못',
+    smallCount: 22,
+    smallSpawnRate: 52,
+    midBossHp: 14,
+    bossName: '대왕 메기',
+    bossSprite: 'boss_1',
+    bossHp: 95,
+    waterColor: '#156178',
+    rippleColor: '#237c96'
+  },
+  2: {
+    name: 'ROUND 2 : 깊은 연꽃 늪지',
+    smallCount: 26,
+    smallSpawnRate: 44,
+    midBossHp: 18,
+    bossName: '황소개구리 대왕',
+    bossSprite: 'boss_2',
+    bossHp: 130,
+    waterColor: '#125468',
+    rippleColor: '#1e6e85'
+  },
+  3: {
+    name: 'ROUND 3 : 수호신의 황금 연못',
+    smallCount: 30,
+    smallSpawnRate: 36,
+    midBossHp: 22,
+    bossName: '연못 수호신 황금잉어',
+    bossSprite: 'boss_3',
+    bossHp: 175,
+    waterColor: '#0e4557',
+    rippleColor: '#195f75'
+  }
+};
+
+// ============================================================================
+// 4. 엔티티 초기화 및 생성 함수
+// ============================================================================
+function initBackground() {
+  lilyPads = [];
+  for (let i = 0; i < 7; i++) {
+    lilyPads.push({
+      x: Math.random() * WIDTH,
+      y: Math.random() * HEIGHT,
+      radius: 14 + Math.random() * 14,
+      speed: 0.45 + Math.random() * 0.25,
+      angle: Math.random() * Math.PI * 2,
+      hasFlower: Math.random() > 0.65
+    });
+  }
+}
+
+function resetPlayer(fullReset = false) {
+  const startX1 = player2 ? WIDTH * 0.35 : WIDTH / 2;
+  if (fullReset || !player) {
+    player = {
+      x: startX1,
+      y: HEIGHT - 65,
+      w: 26,
+      h: 26,
+      speed: 3.9,
+      vx: 0,
+      vy: 0,
+      accel: 0.24,
+      friction: 0.945,
+      hp: 3,
+      maxHp: 3,
+      specialAmmo: 1,
+      fireCooldown: 0,
+      invulnTimer: 90,
+      animTimer: 0
+    };
+  } else {
+    player.x = startX1;
+    player.y = HEIGHT - 65;
+    player.vx = 0;
+    player.vy = 0;
+    player.specialAmmo = 1;
+    player.invulnTimer = 90;
+  }
+
+  if (player2) {
+    if (fullReset) {
+      player2.hp = 3;
+      player2.maxHp = 3;
+    }
+    player2.x = WIDTH * 0.65;
+    player2.y = HEIGHT - 65;
+    player2.vx = 0;
+    player2.vy = 0;
+    player2.specialAmmo = 1;
+    player2.invulnTimer = 90;
+  }
+}
+
+function spawnPlayer2() {
+  player2 = {
+    x: WIDTH * 0.65,
+    y: HEIGHT - 65,
+    w: 26,
+    h: 26,
+    speed: 3.9,
+    vx: 0,
+    vy: 0,
+    accel: 0.24,
+    friction: 0.945,
+    hp: 3,
+    maxHp: 3,
+    specialAmmo: 1,
+    fireCooldown: 0,
+    invulnTimer: 90,
+    animTimer: 0
+  };
+  if (player) {
+    player.x = WIDTH * 0.35;
+  }
+}
+
+function setupRound(roundNum) {
+  round = roundNum;
+  const cfg = ROUND_CONFIG[round];
+  smallSpawned = 0;
+  smallTarget = cfg.smallCount;
+  midBossSpawned = 0;
+  midBossDefeated = 0;
+  finalBossSpawned = false;
+  bossWarningTimer = 0;
+  bullets = [];
+  enemyBullets = [];
+  enemies = [];
+  resetPlayer(roundNum === 1);
+  addFloatingText(WIDTH / 2, HEIGHT / 2 - 20, `ROUND ${round}`, '#fde047', 16, 90);
+}
+
+function startNewGame() {
+  sfx.init();
+  score = 0;
+  particles = [];
+  ripples = [];
+  floatingTexts = [];
+  initBackground();
+  setupRound(1);
+  state = GAME_STATE.PLAYING;
+}
+
+// ============================================================================
+// 5. 입력 처리 (W, A, S, D / 숫자패드 0·Space / 숫자패드 .·X)
+// ============================================================================
+window.addEventListener('keydown', (e) => {
+  if (e.target && e.target.tagName === 'INPUT') return;
+  keys[e.code] = true;
+
+  if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Numpad0', 'NumpadDecimal', 'Period'].includes(e.code)) {
+    e.preventDefault();
+  }
+
+  if (state === GAME_STATE.TITLE || state === GAME_STATE.GAME_OVER || state === GAME_STATE.GAME_CLEAR) {
+    if (e.code === 'Enter' || e.code === 'Space' || e.code === 'Numpad0' || e.code === 'Digit0') {
+      if (netRole !== 'GUEST') startNewGame();
+      return;
+    }
+  }
+
+  // 특수무기 발사: 숫자패드 마침표(NumpadDecimal), 일반 마침표(Period), 또는 X 키
+  if (state === GAME_STATE.PLAYING && (e.code === 'NumpadDecimal' || e.code === 'Period' || e.code === 'KeyX')) {
+    if (netRole === 'GUEST') {
+      if (player2 && player2.hp > 0 && player2.specialAmmo > 0) {
+        remoteGuestState.bombSeq = (remoteGuestState.bombSeq || 0) + 1;
+        /* 폭탄 판정·연출은 호스트가 실행해 전달 */
+      }
+    } else {
+      triggerSpecialBomb(player, false);
+    }
+  }
+});
+
+window.addEventListener('keyup', (e) => {
+  keys[e.code] = false;
+});
+
+document.querySelectorAll('.t-btn').forEach(btn => {
+  const keyCode = btn.getAttribute('data-key');
+  btn.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    sfx.init();
+    keys[keyCode] = true;
+  });
+  btn.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    keys[keyCode] = false;
+  });
+});
+
+const touchFire = document.getElementById('touchFire');
+touchFire.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  sfx.init();
+  if (state !== GAME_STATE.PLAYING) {
+    if (netRole !== 'GUEST') startNewGame();
+  } else {
+    keys['Numpad0'] = true;
+  }
+});
+touchFire.addEventListener('touchend', (e) => {
+  e.preventDefault();
+  keys['Numpad0'] = false;
+});
+
+const touchBomb = document.getElementById('touchBomb');
+touchBomb.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  sfx.init();
+  if (state === GAME_STATE.PLAYING) {
+    if (netRole === 'GUEST') {
+      if (player2 && player2.hp > 0 && player2.specialAmmo > 0) {
+        remoteGuestState.bombSeq = (remoteGuestState.bombSeq || 0) + 1;
+        /* 폭탄 판정·연출은 호스트가 실행해 전달 */
+      }
+    } else {
+      triggerSpecialBomb(player, false);
+    }
+  }
+});
+
+canvas.addEventListener('click', () => {
+  sfx.init();
+  if (state === GAME_STATE.TITLE || state === GAME_STATE.GAME_OVER || state === GAME_STATE.GAME_CLEAR) {
+    if (netRole !== 'GUEST') startNewGame();
+  }
+});
+
+// ============================================================================
+// 6. 전투 및 특수무기(폭탄) 로직
+// ============================================================================
+function firePrimaryWeapon(actor = player, isP2 = false) {
+  if (!actor || actor.hp <= 0 || actor.fireCooldown > 0) return;
+  sfx.shoot();
+  actor.fireCooldown = 10;
+
+  bullets.push({
+    x: actor.x - 6,
+    y: actor.y - 14,
+    vx: 0,
+    vy: -8.5,
+    r: 4,
+    damage: 1,
+    owner: isP2 ? 2 : 1
+  });
+  bullets.push({
+    x: actor.x + 6,
+    y: actor.y - 14,
+    vx: 0,
+    vy: -8.5,
+    r: 4,
+    damage: 1,
+    owner: isP2 ? 2 : 1
+  });
+}
+
+function triggerSpecialBomb(actor = player, visualOnly = false) {
+  if (!actor || actor.hp <= 0 || actor.specialAmmo <= 0) return;
+
+  actor.specialAmmo--;
+  sfx.specialBomb();
+  netEmit(['rp', Math.round(actor.x), Math.round(actor.y)]);
+  bombFlashTimer = 35;
+  screenShake = 18;
+
+  ripples.push({
+    x: actor.x,
+    y: actor.y,
+    r: 10,
+    maxR: 480,
+    alpha: 1,
+    isBomb: true
+  });
+
+  if (visualOnly) return;
+
+  enemyBullets.forEach(eb => {
+    spawnParticles(eb.x, eb.y, '#fef08a', 4, 2);
+  });
+  enemyBullets = [];
+
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    const en = enemies[i];
+    if (en.type === 'small') {
+      damageEnemy(en, 999);
+    } else if (en.type === 'mid') {
+      damageEnemy(en, 12);
+    } else if (en.type === 'boss') {
+      damageEnemy(en, 35);
+    }
+  }
+
+  addFloatingText(WIDTH / 2, HEIGHT / 2, '특수 폭탄 발동!', '#fde047', 14, 65);
+}
+
+// ============================================================================
+// 7. 적 스폰 및 AI 패턴
+// ============================================================================
+let spawnTimer = 0;
+
+function handleSpawning() {
+  const cfg = ROUND_CONFIG[round];
+  spawnTimer++;
+
+  if (smallSpawned < smallTarget) {
+    if (spawnTimer >= cfg.smallSpawnRate) {
+      spawnTimer = 0;
+      const groupCount = Math.min(smallTarget - smallSpawned, Math.random() < 0.45 ? 2 : 1);
+      for (let g = 0; g < groupCount; g++) {
+        spawnSmallEnemy(g);
+        smallSpawned++;
+      }
+    }
+    return;
+  }
+
+  const activeMidBosses = enemies.filter(e => e.type === 'mid').length;
+  const activeSmall = enemies.filter(e => e.type === 'small').length;
+
+  if (midBossDefeated < MID_BOSS_TARGET) {
+    if (activeSmall === 0 && activeMidBosses < 2 && midBossSpawned < MID_BOSS_TARGET) {
+      if (spawnTimer >= 70) {
+        spawnTimer = 0;
+        spawnMidBoss();
+        midBossSpawned++;
+      }
+    }
+    return;
+  }
+
+  if (!finalBossSpawned && enemies.length === 0) {
+    finalBossSpawned = true;
+    bossWarningTimer = 110;
+    sfx.bossWarning();
+    spawnFinalBoss();
+  }
+}
+
+function spawnSmallEnemy(offsetIndex = 0) {
+  const types = ['strider', 'tadpole', 'dragonfly'];
+  const spriteKey = types[Math.floor(Math.random() * types.length)];
+  const margin = 36;
+  const startX = margin + Math.random() * (WIDTH - margin * 2);
+
+  enemies.push({
+    id: ++enemyIdSeq,
+    type: 'small',
+    spriteKey,
+    x: startX,
+    y: -24 - offsetIndex * 28,
+    w: 24,
+    h: 22,
+    hp: 1,
+    maxHp: 1,
+    points: 1,
+    vx: (Math.random() - 0.5) * 1.4,
+    vy: 1.7 + round * 0.28 + Math.random() * 0.5,
+    timer: Math.random() * 100,
+    fireTimer: 45 + Math.floor(Math.random() * 65),
+    hitFlash: 0
+  });
+}
+
+function spawnMidBoss() {
+  const cfg = ROUND_CONFIG[round];
+  const sideX = midBossSpawned % 2 === 0 ? WIDTH * 0.3 : WIDTH * 0.7;
+
+  enemies.push({
+    id: ++enemyIdSeq,
+    type: 'mid',
+    spriteKey: 'midboss',
+    x: sideX,
+    y: -40,
+    targetY: 85 + (midBossSpawned % 2) * 35,
+    w: 48,
+    h: 32,
+    hp: cfg.midBossHp,
+    maxHp: cfg.midBossHp,
+    points: 10,
+    vx: (midBossSpawned % 2 === 0 ? 1 : -1) * (1.3 + round * 0.2),
+    vy: 1.5,
+    timer: 0,
+    fireTimer: 50,
+    hitFlash: 0
+  });
+}
+
+function spawnFinalBoss() {
+  const cfg = ROUND_CONFIG[round];
+  enemies.push({
+    id: ++enemyIdSeq,
+    type: 'boss',
+    name: cfg.bossName,
+    spriteKey: cfg.bossSprite,
+    x: WIDTH / 2,
+    y: -65,
+    targetY: 82,
+    w: 68,
+    h: 40,
+    hp: cfg.bossHp,
+    maxHp: cfg.bossHp,
+    points: 100,
+    vx: 1.4 + round * 0.25,
+    vy: 1.1,
+    timer: 0,
+    fireTimer: 45,
+    patternIndex: 0,
+    hitFlash: 0
+  });
+}
+
+function shootEnemyBullet(x, y, angle, speed, color = '#fb7185', r = 4) {
+  enemyBullets.push({
+    x,
+    y,
+    vx: Math.cos(angle) * speed,
+    vy: Math.sin(angle) * speed,
+    r,
+    color
+  });
+}
+
+function updateEnemies() {
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    const en = enemies[i];
+    en.timer++;
+    if (en.hitFlash > 0) en.hitFlash--;
+
+    if (en.type === 'small') {
+      en.y += en.vy;
+      if (en.spriteKey === 'strider') {
+        en.x += Math.sin(en.timer * 0.07) * 1.8;
+      } else if (en.spriteKey === 'dragonfly') {
+        en.x += en.vx;
+        if (en.x < 24 || en.x > WIDTH - 24) en.vx *= -1;
+      } else {
+        en.x += Math.sin(en.timer * 0.04) * 0.9;
+      }
+
+      en.x = Math.max(20, Math.min(WIDTH - 20, en.x));
+
+      en.fireTimer--;
+      if (en.fireTimer <= 0 && en.y > 20 && en.y < HEIGHT - 120) {
+        en.fireTimer = Math.max(65, 115 - round * 15);
+        const target = getClosestLivingPlayer(en.x, en.y);
+        const angle = Math.atan2(target.y - en.y, target.x - en.x);
+        shootEnemyBullet(en.x, en.y + 10, angle, 2.3 + round * 0.35, '#fda4af', 3.5);
+      }
+
+      if (en.y > HEIGHT + 35) {
+        enemies.splice(i, 1);
+      }
+    } else if (en.type === 'mid') {
+      if (en.y < en.targetY) {
+        en.y += en.vy;
+      } else {
+        en.x += en.vx;
+        en.y = en.targetY + Math.sin(en.timer * 0.05) * 10;
+        if (en.x < 42 || en.x > WIDTH - 42) {
+          en.vx *= -1;
+        }
+      }
+
+      en.fireTimer--;
+      if (en.fireTimer <= 0 && en.y >= en.targetY - 10) {
+        en.fireTimer = Math.max(48, 72 - round * 8);
+        const target = getClosestLivingPlayer(en.x, en.y);
+        const baseAngle = Math.atan2(target.y - en.y, target.x - en.x);
+        [-0.26, 0, 0.26].forEach(offset => {
+          shootEnemyBullet(en.x, en.y + 14, baseAngle + offset, 2.7 + round * 0.3, '#fbbf24', 4);
+        });
+      }
+    } else if (en.type === 'boss') {
+      if (en.y < en.targetY) {
+        en.y += en.vy;
+      } else {
+        en.x += en.vx;
+        en.y = en.targetY + Math.sin(en.timer * 0.035) * 14;
+        if (en.x < 56 || en.x > WIDTH - 56) {
+          en.vx *= -1;
+        }
+      }
+
+      en.fireTimer--;
+      if (en.fireTimer <= 0 && en.y >= en.targetY - 5) {
+        en.patternIndex = (en.patternIndex + 1) % 3;
+        const speed = 2.6 + round * 0.35;
+
+        if (en.patternIndex === 0) {
+          en.fireTimer = 46;
+          const count = 7 + round * 2;
+          for (let k = 0; k < count; k++) {
+            const ang = (Math.PI * 0.15) + (Math.PI * 0.7) * (k / (count - 1));
+            shootEnemyBullet(en.x, en.y + 18, ang, speed, '#f43f5e', 4.5);
+          }
+        } else if (en.patternIndex === 1) {
+          en.fireTimer = 38;
+          const target = getClosestLivingPlayer(en.x, en.y);
+          const base = Math.atan2(target.y - en.y, target.x - en.x);
+          for (let k = -2; k <= 2; k++) {
+            shootEnemyBullet(en.x, en.y + 18, base + k * 0.16, speed + 0.5, '#facc15', 4);
+          }
+        } else {
+          en.fireTimer = 52;
+          const ringCount = 10 + round * 2;
+          for (let k = 0; k < ringCount; k++) {
+            const ang = (Math.PI * 2 / ringCount) * k + (en.timer * 0.03);
+            shootEnemyBullet(en.x, en.y + 10, ang, speed - 0.3, '#38bdf8', 4);
+          }
+        }
+      }
+    }
+  }
+}
+
+function getClosestLivingPlayer(x, y) {
+  const candidates = [];
+  if (player && player.hp > 0) candidates.push(player);
+  if (player2 && player2.hp > 0) candidates.push(player2);
+  if (candidates.length === 0) return { x: WIDTH / 2, y: HEIGHT - 65 };
+  if (candidates.length === 1) return candidates[0];
+  const d1 = Math.hypot(candidates[0].x - x, candidates[0].y - y);
+  const d2 = Math.hypot(candidates[1].x - x, candidates[1].y - y);
+  return d1 <= d2 ? candidates[0] : candidates[1];
+}
+
+function damageEnemy(en, dmg) {
+  en.hp -= dmg;
+  en.hitFlash = 4;
+
+  if (en.hp <= 0) {
+    const idx = enemies.indexOf(en);
+    if (idx !== -1) enemies.splice(idx, 1);
+
+    score += en.points;
+    addFloatingText(en.x, en.y, `+${en.points}`, en.points >= 100 ? '#fde047' : (en.points >= 10 ? '#38bdf8' : '#bbf7d0'), en.points >= 10 ? 12 : 10, 45);
+
+    if (en.type === 'small') {
+      sfx.explode(false);
+      spawnParticles(en.x, en.y, '#86efac', 10, 2.5);
+    } else if (en.type === 'mid') {
+      sfx.explode(true);
+      screenShake = 7;
+      midBossDefeated++;
+      spawnParticles(en.x, en.y, '#fbbf24', 24, 3.8);
+    } else if (en.type === 'boss') {
+      sfx.explode(true);
+      screenShake = 20;
+      enemyBullets = [];
+      spawnParticles(en.x, en.y, '#fde047', 48, 5);
+      spawnParticles(en.x, en.y, '#ef4444', 35, 4.2);
+
+      if (round < MAX_ROUNDS) {
+        sfx.roundClear();
+        state = GAME_STATE.ROUND_CLEAR;
+        roundClearTimer = 140;
+      } else {
+        sfx.gameClear();
+        state = GAME_STATE.GAME_CLEAR;
+      }
+    }
+  } else {
+    sfx.hit();
+  }
+}
+
+// ============================================================================
+// 8. 파티클, 물결 파문, 플로팅 텍스트 유틸리티
+// ============================================================================
+function spawnParticles(x, y, color, count, maxSpeed) {
+  netEmit(['p', Math.round(x), Math.round(y), color, count, maxSpeed]);
+  for (let i = 0; i < count; i++) {
+    const ang = Math.random() * Math.PI * 2;
+    const spd = 0.5 + Math.random() * maxSpeed;
+    particles.push({
+      x,
+      y,
+      vx: Math.cos(ang) * spd,
+      vy: Math.sin(ang) * spd,
+      size: 2 + Math.floor(Math.random() * 3),
+      color,
+      life: 22 + Math.floor(Math.random() * 18),
+      maxLife: 40
+    });
+  }
+}
+
+function addFloatingText(x, y, text, color = '#ffffff', size = 11, life = 50) {
+  netEmit(['t', Math.round(x), Math.round(y), text, color, size, life]);
+  floatingTexts.push({ x, y, text, color, size, life, maxLife: life });
+}
+
+// ============================================================================
+// 9. 메인 업데이트 루프 및 P2P 데이터 전송
+// ============================================================================
+let waterScroll = 0;
+
+function applyLocalMovement(actor) {
+  if (!actor || actor.hp <= 0) return;
+
+  let dx = 0;
+  let dy = 0;
+  if (keys['KeyW'] || keys['ArrowUp']) dy -= 1;
+  if (keys['KeyS'] || keys['ArrowDown']) dy += 1;
+  if (keys['KeyA'] || keys['ArrowLeft']) dx -= 1;
+  if (keys['KeyD'] || keys['ArrowRight']) dx += 1;
+
+  if (dx !== 0 && dy !== 0) {
+    const inv = 1 / Math.SQRT2;
+    dx *= inv;
+    dy *= inv;
+  }
+
+  if (dx !== 0) {
+    actor.vx += dx * actor.accel;
+  } else {
+    actor.vx *= actor.friction;
+    if (Math.abs(actor.vx) < 0.02) actor.vx = 0;
+  }
+
+  if (dy !== 0) {
+    actor.vy += dy * actor.accel;
+  } else {
+    actor.vy *= actor.friction;
+    if (Math.abs(actor.vy) < 0.02) actor.vy = 0;
+  }
+
+  const currentSpeed = Math.hypot(actor.vx, actor.vy);
+  if (currentSpeed > actor.speed) {
+    actor.vx = (actor.vx / currentSpeed) * actor.speed;
+    actor.vy = (actor.vy / currentSpeed) * actor.speed;
+  }
+
+  actor.x += actor.vx;
+  actor.y += actor.vy;
+
+  if (actor.x < 18) {
+    actor.x = 18;
+    actor.vx = 0;
+  } else if (actor.x > WIDTH - 18) {
+    actor.x = WIDTH - 18;
+    actor.vx = 0;
+  }
+
+  if (actor.y < 28) {
+    actor.y = 28;
+    actor.vy = 0;
+  } else if (actor.y > HEIGHT - 22) {
+    actor.y = HEIGHT - 22;
+    actor.vy = 0;
+  }
+}
+
+function playNetEvents(list) {
+  if (!Array.isArray(list)) return;
+  list.forEach(e => {
+    switch (e[0]) {
+      case 's': if (NET_SFX.includes(e[1])) sfx[e[1]](...e.slice(2)); break;
+      case 'p': spawnParticles(e[1], e[2], e[3], e[4], e[5]); break;
+      case 't': addFloatingText(e[1], e[2], e[3], e[4], e[5], e[6]); break;
+      case 'rp': ripples.push({ x: e[1], y: e[2], r: 10, maxR: 480, alpha: 1, isBomb: true }); break;
+    }
+  });
+}
+
+function applyWorldStateFromHost(ws) {
+  if (!ws) return;
+  const prevState = state, prevRound = round;
+  score = ws.score;
+  round = ws.round;
+  state = ws.state;
+  smallSpawned = ws.smallSpawned;
+  smallTarget = ws.smallTarget;
+  midBossDefeated = ws.midBossDefeated;
+  bossWarningTimer = ws.bossWarningTimer;
+  screenShake = Math.max(screenShake, ws.shake || 0);
+  bombFlashTimer = Math.max(bombFlashTimer, ws.flash || 0);
+
+  // 새 게임/새 라운드 시작 시 2P(나) 위치를 시작 지점으로
+  const restarted = state === GAME_STATE.PLAYING && (round !== prevRound ||
+    prevState === GAME_STATE.TITLE || prevState === GAME_STATE.GAME_OVER || prevState === GAME_STATE.GAME_CLEAR);
+  if (restarted && player2) {
+    player2.x = WIDTH * 0.65; player2.y = HEIGHT - 65; player2.vx = 0; player2.vy = 0;
+  }
+
+  if (player && ws.p1) {
+    player.tx = ws.p1.x;
+    player.ty = ws.p1.y;
+    if (Math.hypot(player.tx - player.x, player.ty - player.y) > 80) { player.x = player.tx; player.y = player.ty; }
+    player.vx = ws.p1.vx;
+    player.vy = ws.p1.vy;
+    player.hp = ws.p1.hp;
+    player.specialAmmo = ws.p1.specialAmmo;
+    player.invulnTimer = ws.p1.invulnTimer;
+  }
+  if (player2 && ws.p2) {
+    player2.hp = ws.p2.hp;
+    player2.specialAmmo = ws.p2.specialAmmo;
+    player2.invulnTimer = ws.p2.invulnTimer;
+  }
+  if (Array.isArray(ws.bullets)) bullets = ws.bullets;
+  if (Array.isArray(ws.enemyBullets)) enemyBullets = ws.enemyBullets;
+  if (Array.isArray(ws.enemies)) {
+    const old = new Map(enemies.map(e => [e.id, e]));
+    enemies = ws.enemies.map(n => {
+      const o = old.get(n.id);
+      if (o) {
+        o.hp = n.hp; o.maxHp = n.maxHp; o.hitFlash = n.hitFlash; o.tx = n.x; o.ty = n.y;
+        return o;
+      }
+      n.tx = n.x; n.ty = n.y;
+      return n;
+    });
+  }
+  playNetEvents(ws.ev);
+}
+
+// 스냅샷 사이(60fps vs 30Hz) 프레임을 부드럽게 보간
+function guestExtrapolate() {
+  bullets.forEach(b => { b.x += b.vx || 0; b.y += b.vy || 0; });
+  enemyBullets.forEach(b => { b.x += b.vx || 0; b.y += b.vy || 0; });
+  enemies.forEach(en => {
+    if (en.tx !== undefined) { en.x += (en.tx - en.x) * 0.5; en.y += (en.ty - en.y) * 0.5; }
+    if (en.hitFlash > 0) en.hitFlash--;
+  });
+  if (player && player.tx !== undefined) {
+    player.x += (player.tx - player.x) * 0.5;
+    player.y += (player.ty - player.y) * 0.5;
+  }
+}
+
+function sendWorldStateToGuest() {
+  if (!dataConn || !dataConn.open) return;
+  const r2 = v => Number((v || 0).toFixed(2));
+  dataConn.send({
+    type: 'WORLD_STATE',
+    payload: {
+      score, round, state, smallSpawned, smallTarget, midBossDefeated, bossWarningTimer,
+      shake: screenShake,
+      flash: bombFlashTimer,
+      ev: netEvents.splice(0),
+      p1: player ? {
+        x: Math.round(player.x), y: Math.round(player.y), vx: r2(player.vx), vy: r2(player.vy),
+        hp: player.hp, specialAmmo: player.specialAmmo, invulnTimer: player.invulnTimer
+      } : null,
+      p2: player2 ? { hp: player2.hp, specialAmmo: player2.specialAmmo, invulnTimer: player2.invulnTimer } : null,
+      bullets: bullets.map(b => ({ x: Math.round(b.x), y: Math.round(b.y), vx: r2(b.vx), vy: r2(b.vy), r: b.r, owner: b.owner || 1 })),
+      enemyBullets: enemyBullets.map(eb => ({ x: Math.round(eb.x), y: Math.round(eb.y), vx: r2(eb.vx), vy: r2(eb.vy), r: eb.r, color: eb.color })),
+      enemies: enemies.map(en => ({
+        id: en.id, type: en.type, name: en.name || '', spriteKey: en.spriteKey,
+        x: Math.round(en.x), y: Math.round(en.y), w: en.w, h: en.h,
+        hp: en.hp, maxHp: en.maxHp, hitFlash: en.hitFlash
+      }))
+    }
+  });
+}
+
+function syncNetworkTick() {
+  if (!dataConn || !dataConn.open || netRole === 'SOLO') return;
+  if (dataConn.dataChannel && dataConn.dataChannel.bufferedAmount > 65536) return; // 전송 지연 시 건너뜀
+  const now = Date.now();
+  if (now - lastSyncTime < 33) return; // 초당 약 30프레임 초고속 P2P 동기화
+  lastSyncTime = now;
+
+  if (netRole === 'HOST') {
+    sendWorldStateToGuest();
+  } else if (netRole === 'GUEST' && player2) {
+    dataConn.send({
+      type: 'GUEST_INPUT',
+      payload: {
+        x: Math.round(player2.x),
+        y: Math.round(player2.y),
+        vx: Number(player2.vx.toFixed(2)),
+        vy: Number(player2.vy.toFixed(2)),
+        firing: Boolean(keys['Numpad0'] || keys['Digit0'] || keys['Space'] || keys['KeyZ']),
+        bombSeq: remoteGuestState.bombSeq || 0
+      }
+    });
+  }
+}
+
+function update() {
+  waterScroll = (waterScroll + 1.2) % 32;
+
+  lilyPads.forEach(pad => {
+    pad.y += pad.speed;
+    if (pad.y - pad.radius > HEIGHT) {
+      pad.y = -pad.radius - 10;
+      pad.x = Math.random() * WIDTH;
+    }
+  });
+
+  for (let i = ripples.length - 1; i >= 0; i--) {
+    const rp = ripples[i];
+    rp.r += rp.isBomb ? 14 : 0.7;
+    rp.alpha -= rp.isBomb ? 0.025 : 0.018;
+    if (rp.alpha <= 0 || rp.r >= rp.maxR) {
+      ripples.splice(i, 1);
+    }
+  }
+
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx;
+    p.y += p.vy;
+    p.life--;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+
+  for (let i = floatingTexts.length - 1; i >= 0; i--) {
+    const ft = floatingTexts[i];
+    ft.y -= 0.6;
+    ft.life--;
+    if (ft.life <= 0) floatingTexts.splice(i, 1);
+  }
+
+  if (screenShake > 0) screenShake--;
+  if (bombFlashTimer > 0) bombFlashTimer--;
+  if (bossWarningTimer > 0) bossWarningTimer--;
+
+  if (player) {
+    player.animTimer++;
+    if (player.hp > 0 && player.animTimer % 18 === 0) {
+      ripples.push({ x: player.x, y: player.y + 8, r: 4, maxR: 22, alpha: 0.5, isBomb: false });
+    }
+  }
+  if (player2) {
+    player2.animTimer++;
+    if (player2.hp > 0 && player2.animTimer % 16 === 0) {
+      ripples.push({ x: player2.x, y: player2.y + 9, r: 3, maxR: 20, alpha: 0.45, isBomb: false });
+    }
+  }
+
+  if (netRole === 'GUEST') {
+    if (state === GAME_STATE.PLAYING && player2) {
+      applyLocalMovement(player2);
+      if (player2.invulnTimer > 0) player2.invulnTimer--;
+    }
+    guestExtrapolate();
+    syncNetworkTick();
+    return;
+  }
+
+  if (state === GAME_STATE.ROUND_CLEAR) {
+    roundClearTimer--;
+    if (roundClearTimer <= 0) {
+      setupRound(round + 1);
+      state = GAME_STATE.PLAYING;
+    }
+    syncNetworkTick();
+    return;
+  }
+
+  if (state !== GAME_STATE.PLAYING) {
+    syncNetworkTick();
+    return;
+  }
+
+  if (player && player.hp > 0) {
+    applyLocalMovement(player);
+    if (player.invulnTimer > 0) player.invulnTimer--;
+    if (player.fireCooldown > 0) player.fireCooldown--;
+
+    if (keys['Numpad0'] || keys['Digit0'] || keys['Space'] || keys['KeyZ']) {
+      firePrimaryWeapon(player, false);
+    }
+  }
+
+  if (player2 && player2.hp > 0) {
+    player2.x += (remoteGuestState.x - player2.x) * 0.5;
+    player2.y += (remoteGuestState.y - player2.y) * 0.5;
+    player2.vx = remoteGuestState.vx || 0;
+    player2.vy = remoteGuestState.vy || 0;
+    if (player2.invulnTimer > 0) player2.invulnTimer--;
+    if (player2.fireCooldown > 0) player2.fireCooldown--;
+
+    if (remoteGuestState.firing) {
+      firePrimaryWeapon(player2, true);
+    }
+    if ((remoteGuestState.bombSeq || 0) > lastHandledGuestBombSeq) {
+      lastHandledGuestBombSeq = remoteGuestState.bombSeq;
+      triggerSpecialBomb(player2, false);
+    }
+  }
+
+  for (let i = bullets.length - 1; i >= 0; i--) {
+    const b = bullets[i];
+    b.x += b.vx;
+    b.y += b.vy;
+
+    if (b.y < -12) {
+      bullets.splice(i, 1);
+      continue;
+    }
+
+    for (let j = enemies.length - 1; j >= 0; j--) {
+      const en = enemies[j];
+      if (Math.abs(b.x - en.x) < en.w * 0.5 + b.r && Math.abs(b.y - en.y) < en.h * 0.5 + b.r) {
+        bullets.splice(i, 1);
+        spawnParticles(b.x, b.y, b.owner === 2 ? '#fecaca' : '#bae6fd', 4, 1.8);
+        damageEnemy(en, b.damage);
+        break;
+      }
+    }
+  }
+
+  handleSpawning();
+  updateEnemies();
+
+  const activePlayers = [player, player2].filter(p => p && p.hp > 0);
+  for (let i = enemyBullets.length - 1; i >= 0; i--) {
+    const eb = enemyBullets[i];
+    eb.x += eb.vx;
+    eb.y += eb.vy;
+
+    if (eb.x < -15 || eb.x > WIDTH + 15 || eb.y < -15 || eb.y > HEIGHT + 15) {
+      enemyBullets.splice(i, 1);
+      continue;
+    }
+
+    for (let pIdx = 0; pIdx < activePlayers.length; pIdx++) {
+      const targetP = activePlayers[pIdx];
+      if (targetP.invulnTimer <= 0) {
+        const dist = Math.hypot(eb.x - targetP.x, eb.y - targetP.y);
+        if (dist < eb.r + 7) {
+          enemyBullets.splice(i, 1);
+          handlePlayerHit(targetP);
+          break;
+        }
+      }
+    }
+  }
+
+  for (let pIdx = 0; pIdx < activePlayers.length; pIdx++) {
+    const targetP = activePlayers[pIdx];
+    if (targetP.invulnTimer <= 0) {
+      for (let i = 0; i < enemies.length; i++) {
+        const en = enemies[i];
+        if (Math.abs(targetP.x - en.x) < en.w * 0.42 + 7 && Math.abs(targetP.y - en.y) < en.h * 0.42 + 7) {
+          handlePlayerHit(targetP);
+          break;
+        }
+      }
+    }
+  }
+
+  syncNetworkTick();
+}
+
+function handlePlayerHit(targetP = player) {
+  if (!targetP || targetP.hp <= 0) return;
+  const isP2 = targetP === player2;
+  targetP.hp--;
+  targetP.invulnTimer = 100;
+  screenShake = 12;
+  sfx.playerDamage();
+  spawnParticles(targetP.x, targetP.y, isP2 ? '#f87171' : '#4ade80', 22, 3.5);
+  addFloatingText(targetP.x, targetP.y - 16, isP2 ? '2P 피격!' : '1P 피격!', '#f87171', 12, 45);
+
+  const p1Alive = player && player.hp > 0;
+  const p2Alive = player2 && player2.hp > 0;
+  if (!p1Alive && !p2Alive) {
+    state = GAME_STATE.GAME_OVER;
+  }
+}
+
+// ============================================================================
+// 10. 렌더링
+// ============================================================================
+function drawPondBackground() {
+  const cfg = ROUND_CONFIG[round] || ROUND_CONFIG[1];
+
+  ctx.fillStyle = cfg.waterColor;
+  ctx.fillRect(0, 0, WIDTH, HEIGHT);
+
+  ctx.fillStyle = cfg.rippleColor;
+  for (let y = -32 + waterScroll; y < HEIGHT; y += 32) {
+    for (let x = 16; x < WIDTH; x += 48) {
+      const offsetX = (Math.floor((y - waterScroll) / 32) % 2) * 24;
+      ctx.fillRect(x + offsetX, Math.floor(y), 12, 2);
+      ctx.fillRect(x + offsetX + 4, Math.floor(y) + 4, 6, 2);
+    }
+  }
+
+  lilyPads.forEach(pad => {
+    ctx.save();
+    ctx.translate(Math.floor(pad.x), Math.floor(pad.y));
+
+    ctx.fillStyle = 'rgba(4, 24, 18, 0.35)';
+    ctx.beginPath();
+    ctx.arc(3, 4, pad.radius, 0.25, Math.PI * 2 - 0.25);
+    ctx.lineTo(3, 4);
+    ctx.fill();
+
+    ctx.fillStyle = '#15803d';
+    ctx.beginPath();
+    ctx.arc(0, 0, pad.radius, 0.25, Math.PI * 2 - 0.25);
+    ctx.lineTo(0, 0);
+    ctx.fill();
+
+    ctx.fillStyle = '#22c55e';
+    ctx.beginPath();
+    ctx.arc(-2, -2, pad.radius * 0.72, 0.3, Math.PI * 2 - 0.3);
+    ctx.lineTo(-2, -2);
+    ctx.fill();
+
+    if (pad.hasFlower) {
+      ctx.fillStyle = '#fbcfe8';
+      ctx.fillRect(-4, -4, 8, 8);
+      ctx.fillStyle = '#f472b6';
+      ctx.fillRect(-3, -6, 6, 12);
+      ctx.fillRect(-6, -3, 12, 6);
+      ctx.fillStyle = '#fde047';
+      ctx.fillRect(-2, -2, 4, 4);
+    }
+    ctx.restore();
+  });
+
+  ripples.forEach(rp => {
+    ctx.save();
+    ctx.strokeStyle = rp.isBomb
+      ? `rgba(253, 224, 71, ${Math.max(0, rp.alpha)})`
+      : `rgba(186, 230, 253, ${Math.max(0, rp.alpha)})`;
+    ctx.lineWidth = rp.isBomb ? 6 : 2;
+    ctx.beginPath();
+    ctx.arc(Math.floor(rp.x), Math.floor(rp.y), Math.floor(rp.r), 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  });
+}
+
+function drawPlayer() {
+  if (player && player.hp > 0) {
+    const visible = !(player.invulnTimer > 0 && Math.floor(player.invulnTimer / 5) % 2 === 0);
+    if (visible) {
+      const speedBoost = Math.hypot(player.vx, player.vy) > 0.6 ? 6 : 11;
+      const frogCycle = [0, 1, 2, 1];
+      const frame = frogCycle[Math.floor(player.animTimer / speedBoost) % 4];
+      const sprite = spriteCache[`frog_${frame}`];
+      if (sprite) {
+        ctx.save();
+        ctx.translate(Math.floor(player.x), Math.floor(player.y));
+        ctx.rotate(player.vx * 0.06);
+        ctx.drawImage(
+          sprite,
+          Math.floor(-sprite.width / 2),
+          Math.floor(-sprite.height / 2)
+        );
+        if (player2) {
+          ctx.font = '900 9px "Noto Sans KR", sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillStyle = '#86efac';
+          ctx.fillText('1P', 0, -sprite.height / 2 - 3);
+        }
+        ctx.restore();
+      }
+    }
+  }
+
+  if (player2 && player2.hp > 0) {
+    const visible2 = !(player2.invulnTimer > 0 && Math.floor(player2.invulnTimer / 5) % 2 === 0);
+    if (visible2) {
+      const tailSpeed = Math.hypot(player2.vx, player2.vy) > 0.6 ? 5 : 9;
+      const fishCycle = [0, 1, 2, 1];
+      const frame2 = fishCycle[Math.floor(player2.animTimer / tailSpeed) % 4];
+      const sprite2 = spriteCache[`fish_${frame2}`];
+      if (sprite2) {
+        ctx.save();
+        ctx.translate(Math.floor(player2.x), Math.floor(player2.y));
+        ctx.rotate(player2.vx * 0.07);
+        ctx.drawImage(
+          sprite2,
+          Math.floor(-sprite2.width / 2),
+          Math.floor(-sprite2.height / 2)
+        );
+        ctx.font = '900 9px "Noto Sans KR", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#fca5a5';
+        ctx.fillText('2P', 0, -sprite2.height / 2 - 3);
+        ctx.restore();
+      }
+    }
+  }
+}
+
+function drawEnemies() {
+  enemies.forEach(en => {
+    const sprite = spriteCache[en.spriteKey];
+    if (!sprite) return;
+
+    ctx.save();
+    ctx.translate(Math.floor(en.x), Math.floor(en.y));
+    if (en.hitFlash > 0) {
+      ctx.filter = 'brightness(2.5)';
+    }
+    ctx.drawImage(
+      sprite,
+      Math.floor(-sprite.width / 2),
+      Math.floor(-sprite.height / 2)
+    );
+    ctx.restore();
+
+    if (en.type === 'mid' && en.hp < en.maxHp) {
+      const barW = 36;
+      const barH = 4;
+      ctx.fillStyle = '#090d16';
+      ctx.fillRect(Math.floor(en.x - barW / 2 - 1), Math.floor(en.y - en.h / 2 - 9), barW + 2, barH + 2);
+      ctx.fillStyle = '#f59e0b';
+      ctx.fillRect(Math.floor(en.x - barW / 2), Math.floor(en.y - en.h / 2 - 8), Math.floor(barW * (en.hp / en.maxHp)), barH);
+    }
+  });
+}
+
+function drawBullets() {
+  bullets.forEach(b => {
+    const isP2 = b.owner === 2;
+    ctx.fillStyle = isP2 ? '#dc2626' : '#0284c7';
+    ctx.beginPath();
+    ctx.arc(Math.floor(b.x), Math.floor(b.y), b.r + 1, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = isP2 ? '#fee2e2' : '#e0f2fe';
+    ctx.beginPath();
+    ctx.arc(Math.floor(b.x), Math.floor(b.y), b.r - 1, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  enemyBullets.forEach(eb => {
+    ctx.fillStyle = '#1e1b4b';
+    ctx.beginPath();
+    ctx.arc(Math.floor(eb.x), Math.floor(eb.y), eb.r + 1.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = eb.color;
+    ctx.beginPath();
+    ctx.arc(Math.floor(eb.x), Math.floor(eb.y), eb.r, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(Math.floor(eb.x - 1), Math.floor(eb.y - 1), 2, 2);
+  });
+}
+
+function drawParticlesAndTexts() {
+  particles.forEach(p => {
+    ctx.fillStyle = p.color;
+    ctx.fillRect(Math.floor(p.x), Math.floor(p.y), p.size, p.size);
+  });
+
+  floatingTexts.forEach(ft => {
+    ctx.save();
+    ctx.font = `900 ${ft.size}px "Noto Sans KR", sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#04100c';
+    ctx.fillText(ft.text, Math.floor(ft.x) + 1, Math.floor(ft.y) + 1);
+    ctx.fillStyle = ft.color;
+    ctx.fillText(ft.text, Math.floor(ft.x), Math.floor(ft.y));
+    ctx.restore();
+  });
+}
+
+function drawHUD() {
+  ctx.save();
+  const hudHeight = player2 ? 70 : 56;
+  ctx.fillStyle = 'rgba(4, 18, 14, 0.72)';
+  ctx.fillRect(8, 8, 174, hudHeight);
+  ctx.strokeStyle = '#4ade80';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(8, 8, 174, hudHeight);
+
+  ctx.font = '900 13px "Noto Sans KR", sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#fde047';
+  ctx.fillText(`점수 : ${score} 점`, 16, 27);
+
+  ctx.font = '700 11px "Noto Sans KR", sans-serif';
+  ctx.fillStyle = '#86efac';
+  ctx.fillText(`ROUND ${round} / ${MAX_ROUNDS}`, 16, 44);
+
+  if (player) {
+    const bombText = player.specialAmmo > 0 ? '1P 폭탄 : ● (준비)' : '1P 폭탄 : ○ (완료)';
+    ctx.fillStyle = player.specialAmmo > 0 ? '#38bdf8' : '#94a3b8';
+    ctx.fillText(bombText, 16, 58);
+
+    if (player2) {
+      const bombText2 = player2.specialAmmo > 0 ? '2P 폭탄 : ● (준비)' : '2P 폭탄 : ○ (완료)';
+      ctx.fillStyle = player2.specialAmmo > 0 ? '#fca5a5' : '#94a3b8';
+      ctx.fillText(bombText2, 16, 72);
+    }
+
+    const hpBoxH = player2 ? 44 : 28;
+    ctx.fillStyle = 'rgba(4, 18, 14, 0.72)';
+    ctx.fillRect(WIDTH - 102, 8, 94, hpBoxH);
+    ctx.strokeStyle = '#4ade80';
+    ctx.strokeRect(WIDTH - 102, 8, 94, hpBoxH);
+
+    ctx.font = '900 11px "Noto Sans KR", sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#4ade80';
+    const hearts1 = '♥'.repeat(Math.max(0, player.hp)) + '♡'.repeat(Math.max(0, player.maxHp - player.hp));
+    ctx.fillText(`1P ${hearts1}`, WIDTH - 14, 25);
+
+    if (player2) {
+      ctx.fillStyle = '#f87171';
+      const hearts2 = '♥'.repeat(Math.max(0, player2.hp)) + '♡'.repeat(Math.max(0, player2.maxHp - player2.hp));
+      ctx.fillText(`2P ${hearts2}`, WIDTH - 14, 43);
+    }
+  }
+
+  if (state === GAME_STATE.PLAYING) {
+    const progY = player2 ? 56 : 40;
+    ctx.fillStyle = 'rgba(4, 18, 14, 0.65)';
+    ctx.fillRect(WIDTH - 134, progY, 126, 22);
+    ctx.font = '700 10px "Noto Sans KR", sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#e2e8f0';
+
+    if (smallSpawned < smallTarget || enemies.some(e => e.type === 'small')) {
+      ctx.fillText(`소형 적 출현: ${smallSpawned}/${smallTarget}`, WIDTH - 14, progY + 15);
+    } else if (midBossDefeated < MID_BOSS_TARGET) {
+      ctx.fillStyle = '#fbbf24';
+      ctx.fillText(`중간보스 격추: ${midBossDefeated}/${MID_BOSS_TARGET}`, WIDTH - 14, progY + 15);
+    } else {
+      ctx.fillStyle = '#f43f5e';
+      ctx.fillText(`최종 보스전 진행중!`, WIDTH - 14, progY + 15);
+    }
+  }
+
+  const boss = enemies.find(e => e.type === 'boss');
+  if (boss) {
+    const barW = 240;
+    const barH = 10;
+    const bx = (WIDTH - barW) / 2;
+    const by = 82;
+
+    ctx.fillStyle = 'rgba(0,0,0,0.8)';
+    ctx.fillRect(bx - 2, by - 2, barW + 4, barH + 4);
+    ctx.fillStyle = '#dc2626';
+    ctx.fillRect(bx, by, Math.max(0, Math.floor(barW * (boss.hp / boss.maxHp))), barH);
+    ctx.strokeStyle = '#fde047';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(bx - 2, by - 2, barW + 4, barH + 4);
+
+    ctx.font = '900 10px "Noto Sans KR", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#fef08a';
+    ctx.fillText(`BOSS : ${boss.name}`, WIDTH / 2, by - 5);
+  }
+
+  if (bossWarningTimer > 0 && Math.floor(bossWarningTimer / 10) % 2 === 0) {
+    ctx.fillStyle = 'rgba(220, 38, 38, 0.85)';
+    ctx.fillRect(0, HEIGHT / 2 - 26, WIDTH, 52);
+    ctx.font = '900 18px "Noto Sans KR", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText('⚠ 경고! 최종 보스 출현 ⚠', WIDTH / 2, HEIGHT / 2 + 6);
+  }
+
+  ctx.restore();
+}
+
+function drawOverlays() {
+  if (bombFlashTimer > 0) {
+    ctx.fillStyle = `rgba(255, 255, 220, ${(bombFlashTimer / 35) * 0.65})`;
+    ctx.fillRect(0, 0, WIDTH, HEIGHT);
+  }
+
+  if (state === GAME_STATE.TITLE) {
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(4, 16, 12, 0.78)';
+    ctx.fillRect(0, 0, WIDTH, HEIGHT);
+
+    const frog = spriteCache['frog_2'];
+    const fish = spriteCache['fish_0'];
+    if (frog) {
+      ctx.drawImage(frog, WIDTH / 2 - frog.width * 2 - 8, 96, frog.width * 2, frog.height * 2);
+    }
+    if (fish) {
+      ctx.drawImage(fish, WIDTH / 2 + 8, 96, fish.width * 2, fish.height * 2);
+    }
+
+    ctx.font = '900 26px "Noto Sans KR", sans-serif';
+    ctx.fillStyle = '#052e16';
+    ctx.fillText('개구리 1942', WIDTH / 2 + 3, 193);
+    ctx.fillStyle = '#4ade80';
+    ctx.fillText('개구리 1942', WIDTH / 2, 190);
+
+    ctx.font = '900 15px "Noto Sans KR", sans-serif';
+    ctx.fillStyle = '#fde047';
+    ctx.fillText('- 연못 대작전 -', WIDTH / 2, 216);
+
+    ctx.fillStyle = 'rgba(15, 42, 32, 0.9)';
+    ctx.fillRect(36, 240, WIDTH - 72, 118);
+    ctx.strokeStyle = '#4ade80';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(36, 240, WIDTH - 72, 118);
+
+    ctx.font = '700 11px "Noto Sans KR", sans-serif';
+    ctx.fillStyle = '#dcfce7';
+    ctx.fillText('이동 : W / A / S / D (또는 방향키)', WIDTH / 2, 264);
+    ctx.fillText('주무기(무한) : 숫자패드 0 / Space', WIDTH / 2, 286);
+    ctx.fillText('특수무기(폭탄) : 숫자패드 . / X (라운드당 1회)', WIDTH / 2, 308);
+    ctx.fillStyle = '#fde047';
+    ctx.fillText('소형 적 1점 · 중간보스 10점 · 최종보스 100점', WIDTH / 2, 336);
+
+    if (Math.floor(Date.now() / 450) % 2 === 0) {
+      ctx.font = '900 15px "Noto Sans KR", sans-serif';
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(
+        netRole === 'GUEST' ? '방장(1P)이 게임을 시작할 때까지 대기중...' : '화면 클릭 또는 ENTER / 0 키로 시작!',
+        WIDTH / 2,
+        405
+      );
+    }
+    ctx.restore();
+  } else if (state === GAME_STATE.ROUND_CLEAR) {
+    ctx.save();
+    ctx.fillStyle = 'rgba(4, 20, 15, 0.72)';
+    ctx.fillRect(24, HEIGHT / 2 - 48, WIDTH - 48, 96);
+    ctx.strokeStyle = '#fde047';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(24, HEIGHT / 2 - 48, WIDTH - 48, 96);
+
+    ctx.textAlign = 'center';
+    ctx.font = '900 20px "Noto Sans KR", sans-serif';
+    ctx.fillStyle = '#fde047';
+    ctx.fillText(`ROUND ${round} 클리어!`, WIDTH / 2, HEIGHT / 2 - 8);
+
+    ctx.font = '700 13px "Noto Sans KR", sans-serif';
+    ctx.fillStyle = '#bbf7d0';
+    ctx.fillText('다음 연못으로 이동합니다...', WIDTH / 2, HEIGHT / 2 + 22);
+    ctx.restore();
+  } else if (state === GAME_STATE.GAME_OVER) {
+    ctx.save();
+    ctx.fillStyle = 'rgba(15, 4, 4, 0.82)';
+    ctx.fillRect(0, 0, WIDTH, HEIGHT);
+
+    ctx.textAlign = 'center';
+    ctx.font = '900 30px "Noto Sans KR", sans-serif';
+    ctx.fillStyle = '#ef4444';
+    ctx.fillText('게임 오버', WIDTH / 2, HEIGHT / 2 - 30);
+
+    ctx.font = '900 16px "Noto Sans KR", sans-serif';
+    ctx.fillStyle = '#fde047';
+    ctx.fillText(`최종 점수 : ${score} 점`, WIDTH / 2, HEIGHT / 2 + 12);
+
+    ctx.font = '700 13px "Noto Sans KR", sans-serif';
+    ctx.fillStyle = '#e2e8f0';
+    ctx.fillText(
+      netRole === 'GUEST' ? '방장(1P)의 재시작을 기다리는 중...' : '클릭 또는 ENTER / 0 키로 다시 도전',
+      WIDTH / 2,
+      HEIGHT / 2 + 54
+    );
+    ctx.restore();
+  } else if (state === GAME_STATE.GAME_CLEAR) {
+    ctx.save();
+    ctx.fillStyle = 'rgba(4, 22, 16, 0.84)';
+    ctx.fillRect(0, 0, WIDTH, HEIGHT);
+
+    ctx.fillStyle = 'rgba(16, 56, 40, 0.95)';
+    ctx.fillRect(28, HEIGHT / 2 - 85, WIDTH - 56, 170);
+    ctx.strokeStyle = '#fde047';
+    ctx.lineWidth = 4;
+    ctx.strokeRect(28, HEIGHT / 2 - 85, WIDTH - 56, 170);
+
+    ctx.textAlign = 'center';
+    ctx.font = '900 32px "Noto Sans KR", sans-serif';
+    ctx.fillStyle = '#052e16';
+    ctx.fillText('게임클리어', WIDTH / 2 + 3, HEIGHT / 2 - 22);
+    ctx.fillStyle = '#fde047';
+    ctx.fillText('게임클리어', WIDTH / 2, HEIGHT / 2 - 25);
+
+    ctx.font = '700 13px "Noto Sans KR", sans-serif';
+    ctx.fillStyle = '#86efac';
+    ctx.fillText('모든 연못의 평화를 되찾았습니다!', WIDTH / 2, HEIGHT / 2 + 10);
+
+    ctx.font = '900 17px "Noto Sans KR", sans-serif';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(`최종 획득 점수 : ${score} 점`, WIDTH / 2, HEIGHT / 2 + 42);
+
+    ctx.font = '700 11px "Noto Sans KR", sans-serif';
+    ctx.fillStyle = '#bbf7d0';
+    ctx.fillText(
+      netRole === 'GUEST' ? '방장(1P)이 다시 시작할 수 있습니다' : '다시 플레이하려면 클릭 또는 0 키를 누르세요',
+      WIDTH / 2,
+      HEIGHT / 2 + 70
+    );
+    ctx.restore();
+  }
+}
+
+function render() {
+  ctx.save();
+  if (screenShake > 0) {
+    const sx = (Math.random() - 0.5) * screenShake * 0.7;
+    const sy = (Math.random() - 0.5) * screenShake * 0.7;
+    ctx.translate(sx, sy);
+  }
+
+  drawPondBackground();
+  drawBullets();
+  drawEnemies();
+  drawPlayer();
+  drawParticlesAndTexts();
+  drawHUD();
+  drawOverlays();
+
+  ctx.restore();
+}
+
+// ============================================================================
+// 11. 게임 루프 시작
+// ============================================================================
+function gameLoop() {
+  update();
+  render();
+  requestAnimationFrame(gameLoop);
+}
+
+window.onload = function () {
+  initSprites();
+  initBackground();
+  resetPlayer(true);
+  gameLoop();
+  const q = new URLSearchParams(location.search).get('room');
+  if (q) {
+    roomCodeInput.value = q.toUpperCase().slice(0, 6);
+    setTimeout(() => joinRoomBtn.click(), 400);
+  }
+};
+</script>
+<script type="module">
+  // Firebase 초기화 (게임 본체와 독립 모듈: 로드 실패해도 게임은 정상 동작)
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-app.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyA95TXWcmzPe7KBSNaf_eeg3nCTTUtxB_A",
+    authDomain: "frog-online.firebaseapp.com",
+    projectId: "frog-online",
+    storageBucket: "frog-online.firebasestorage.app",
+    messagingSenderId: "304807371746",
+    appId: "1:304807371746:web:d56d0238010313b6c34fbb"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  window.firebaseApp = app; // 이후 Firestore/Database 등 기능 추가 시 사용
+</script>
+</body>
+</html>
